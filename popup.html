@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Social Recall</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+</head>
+<body>
+  <div class="container">
+    <div class="input-group">
+      <div class="input-with-icon">
+        <span class="material-icons icon">person</span>
+        <input type="text" id="personName" placeholder="Person's name">
+      </div>
+    </div>
+    <div class="input-group">
+      <div class="input-with-icon">
+        <span class="material-icons icon">note</span>
+        <textarea id="notes" placeholder="Add notes about this person..."></textarea>
+      </div>
+      <button id="saveButton">Save</button>
+    </div>
+    <div class="notes-list" id="notesList">
+      <!-- Notes will be displayed here -->
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

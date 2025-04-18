@@ -1,0 +1,221 @@
+body {
+  width: 350px;
+  padding: 15px;
+  font-family: Arial, sans-serif;
+}
+
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+h1 {
+  margin: 0;
+  color: #333;
+  font-size: 20px;
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+h2 {
+  margin: 0 0 10px 0;
+  color: #0077b5;
+  font-size: 16px;
+  border-bottom: 1px solid #ddd;
+  padding-bottom: 5px;
+}
+
+label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 3px;
+  color: #555;
+}
+
+.contact-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #f8f8f8;
+  padding: 10px;
+  border-radius: 5px;
+  border-left: 3px solid #0077b5;
+}
+
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.input-with-icon {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.input-with-icon .icon {
+  color: #666;
+  font-size: 20px;
+  margin-top: 6px;
+}
+
+.input-with-icon input,
+.input-with-icon textarea {
+  flex: 1;
+  padding-left: 8px;
+}
+
+input, textarea {
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+input:disabled, textarea:disabled {
+  background-color: #f5f5f5;
+  color: #999;
+}
+
+textarea {
+  height: 80px;
+  resize: vertical;
+  margin-bottom: 5px;
+}
+
+button {
+  background-color: #0077b5;
+  color: white;
+  padding: 10px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+button:hover:not(:disabled) {
+  background-color: #005c8d;
+}
+
+button:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+}
+
+.notes-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.person-notes {
+  margin-bottom: 15px;
+  padding: 10px;
+  background-color: #f9f9f9;
+  border-radius: 4px;
+}
+
+.person-notes h3 {
+  margin: 0 0 10px 0;
+  color: #333;
+}
+
+.note-entry {
+  margin-bottom: 8px;
+  padding: 8px;
+  background-color: white;
+  border-radius: 4px;
+}
+
+.note-text {
+  margin: 0 0 5px 0;
+}
+
+.note-date {
+  font-size: 12px;
+  color: #666;
+}
+
+/* LinkedIn Profile Styles */
+.linkedin-section {
+  margin-bottom: 20px;
+  border-radius: 4px;
+  background-color: #f3f6f8;
+  padding: 12px;
+}
+
+.profile-entry {
+  background-color: white;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  padding: 10px;
+  border-left: 3px solid #0077b5;
+}
+
+.current-profile {
+  border-left: 4px solid #0077b5;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.profile-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 5px;
+}
+
+.profile-name {
+  margin: 0;
+  font-size: 16px;
+  color: #0077b5;
+}
+
+.profile-link {
+  font-size: 12px;
+  text-decoration: none;
+  color: #0077b5;
+  padding: 3px 6px;
+  background-color: #e1f0fa;
+  border-radius: 3px;
+}
+
+.profile-link:hover {
+  background-color: #cce5f5;
+}
+
+.profile-details {
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  color: #666;
+}
+
+.profile-id, .profile-date {
+  margin-bottom: 2px;
+}
+
+/* Info message styling */
+.info-message {
+  background-color: #f9f9f9;
+  border-radius: 4px;
+  padding: 15px;
+  text-align: center;
+  margin: 10px 0;
+  color: #666;
+}
+
+.notes-message {
+  background-color: #f0f7ff;
+  color: #0077b5;
+  border-left: 3px solid #0077b5;
+}
+
+.notes-section {
+  margin-top: 15px;
+  padding-top: 10px;
+  border-top: 1px solid #eee;
+}
