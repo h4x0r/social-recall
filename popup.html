@@ -1,25 +1,44 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <title>Social Recall</title>
+  <title>Notes</title>
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
 </head>
 <body>
   <div class="container">
-    <div class="input-group">
-      <div class="input-with-icon">
+    <div class="input-row">
+      <div class="icon-container">
         <span class="material-icons icon">person</span>
-        <input type="text" id="personName" placeholder="Person's name">
+      </div>
+      <input type="text" id="personName" placeholder="Person's name">
+    </div>
+    
+    <div class="employers-container">
+      <div class="icon-container">
+        <span class="material-icons icon">work</span>
+      </div>
+      <div class="company-logos-container" id="companyLogosContainer">
+        <!-- Company logos will be displayed here -->
       </div>
     </div>
-    <div class="input-group">
-      <div class="input-with-icon">
-        <span class="material-icons icon">note</span>
-        <textarea id="notes" placeholder="Add notes about this person..."></textarea>
+    
+    <div class="input-row">
+      <div class="icon-container">
+        <span class="material-icons icon">edit</span>
+      </div>
+      <textarea id="notes" placeholder="Add notes about this person..."></textarea>
+    </div>
+    
+    <div class="input-row">
+      <div class="icon-container">
+        <a href="settings.html" class="settings-link">
+          <span class="material-icons icon">settings</span>
+        </a>
       </div>
       <button id="saveButton">Save</button>
     </div>
+    
     <div class="notes-list" id="notesList">
       <!-- Notes will be displayed here -->
     </div>

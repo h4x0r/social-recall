@@ -1,13 +1,13 @@
 body {
-  width: 350px;
-  padding: 15px;
+  width: 320px;
+  padding: 10px;
   font-family: Arial, sans-serif;
 }
 
 .container {
   display: flex;
   flex-direction: column;
-  gap: 15px;
+  gap: 10px;
 }
 
 h1 {
@@ -44,33 +44,50 @@ label {
   border-left: 3px solid #0077b5;
 }
 
-.input-group {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
+.input-group,
+.input-with-icon,
+.action-row {
+  /* These styles are replaced by the new input-row based layout */
+  display: none;
 }
 
-.input-with-icon {
-  position: relative;
+.input-row {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  align-items: center;
+  margin-bottom: 8px;
+  width: 100%;
 }
 
-.input-with-icon .icon {
+.icon-container {
+  width: 24px;
+  flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.icon {
   color: #666;
-  font-size: 20px;
-  margin-top: 6px;
+  font-size: 18px;
 }
 
-.input-with-icon input,
-.input-with-icon textarea {
+.input-row input,
+.input-row textarea,
+.input-row button {
   flex: 1;
-  padding-left: 8px;
+  margin-left: 6px;
+  border-radius: 4px;
+  padding: 6px;
+  font-size: 14px;
+}
+
+.input-row textarea {
+  height: 70px;
+  resize: vertical;
 }
 
 input, textarea {
-  padding: 8px;
+  padding: 6px;
   border: 1px solid #ddd;
   border-radius: 4px;
   font-size: 14px;
@@ -82,7 +99,7 @@ input:disabled, textarea:disabled {
 }
 
 textarea {
-  height: 80px;
+  height: 70px;
   resize: vertical;
   margin-bottom: 5px;
 }
@@ -90,7 +107,7 @@ textarea {
 button {
   background-color: #0077b5;
   color: white;
-  padding: 10px;
+  padding: 6px;
   border: none;
   border-radius: 4px;
   cursor: pointer;
@@ -218,4 +235,182 @@ button:disabled {
   margin-top: 15px;
   padding-top: 10px;
   border-top: 1px solid #eee;
+}
+
+/* Settings page styles */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.back-link {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  text-decoration: none;
+  color: #0077b5;
+  font-size: 14px;
+  padding: 5px 10px;
+  border-radius: 4px;
+  background-color: #e1f0fa;
+}
+
+.back-link:hover {
+  background-color: #cce5f5;
+}
+
+.settings-section {
+  background-color: #f9f9f9;
+  border-radius: 4px;
+  padding: 15px;
+  margin-bottom: 20px;
+}
+
+.setting-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.setting-item:last-child {
+  border-bottom: none;
+}
+
+.setting-info h3 {
+  margin: 0;
+  font-size: 14px;
+  color: #333;
+}
+
+.setting-info p {
+  margin: 5px 0 0;
+  font-size: 12px;
+  color: #666;
+}
+
+.secondary-button {
+  background-color: #f3f6f8;
+  color: #0077b5;
+  border: 1px solid #0077b5;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 12px;
+  margin-left: 15px;
+}
+
+.secondary-button:hover {
+  background-color: #e1f0fa;
+}
+
+.select-input {
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background-color: white;
+  font-size: 14px;
+  color: #333;
+}
+
+.settings-link {
+  color: #666;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.settings-link:hover {
+  color: #0077b5;
+}
+
+.input-row:first-child {
+  align-items: center;
+}
+
+.input-row:nth-child(2) {
+  align-items: flex-start;
+}
+
+.input-row:nth-child(2) .icon-container {
+  margin-top: 8px;
+}
+
+.input-row:nth-child(3) {
+  align-items: center;
+}
+
+.input-row input {
+  height: 18px;
+}
+
+/* Company logos styling */
+.employers-container {
+  display: flex;
+  align-items: center; /* Center align items vertically */
+  margin-bottom: 10px;
+}
+
+.employers-container .icon-container {
+  margin-top: 0;
+  display: flex;
+  align-items: center;
+  height: 34px; /* Match the height of logos */
+}
+
+.company-logos-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px; /* Reduced from 8px to fit more logos */
+  padding: 5px 5px 5px 6px; /* Top, right, bottom, left padding */
+  margin: 0; /* Remove any margins that might affect alignment */
+}
+
+.company-logo {
+  width: 36px; /* Slightly larger logos */
+  height: 36px;
+  border-radius: 4px;
+  object-fit: contain;
+  background-color: #f9f9f9;
+  border: 1px solid #ddd;
+  padding: 2px;
+}
+
+.company-logo-wrapper {
+  position: relative;
+  cursor: pointer;
+}
+
+.company-logo-new {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  width: 10px;
+  height: 10px;
+  background-color: #e74c3c;
+  border-radius: 50%;
+  border: 1px solid white;
+}
+
+.company-logo-tooltip {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #333;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  display: none;
+  z-index: 10;
+}
+
+.company-logo-wrapper:hover .company-logo-tooltip {
+  display: block;
 }
