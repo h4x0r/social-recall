@@ -285,17 +285,21 @@ document.addEventListener('DOMContentLoaded', () => {
       const savedEmployers = savedProfile?.employers || [];
       const savedCompanyNames = savedEmployers.map(e => e.company.toLowerCase());
       
+      // Check if this is the first time visiting the profile
+      const isFirstVisit = !savedProfile; 
+      
       console.log('Saved employers:', savedCompanyNames);
       console.log('Current employers:', employers.map(e => e.company));
+      console.log('Is first visit:', isFirstVisit);
       
-      // Display company logos, highlighting new ones
+      // Display company logos, highlighting new ones (but not on first visit)
       employers.forEach(employer => {
         if (employer.company) {
           const logoWrapper = document.createElement('div');
           logoWrapper.className = 'company-logo-wrapper';
           
-          // Check if this employer is new (not in saved data)
-          const isNewEmployer = !savedCompanyNames.includes(employer.company.toLowerCase());
+          // Check if this employer is new (not in saved data) and not a first visit
+          const isNewEmployer = !isFirstVisit && !savedCompanyNames.includes(employer.company.toLowerCase());
           
           if (isNewEmployer) {
             console.log(`New employer found: ${employer.company}`);
@@ -326,7 +330,7 @@ document.addEventListener('DOMContentLoaded', () => {
             createInitialsPlaceholder(logoWrapper, employer.company);
           }
           
-          // Add tooltip with company name
+          // Add tooltip with company name, only add (New) if it's a new employer and not first visit
           const tooltip = document.createElement('span');
           tooltip.className = 'company-logo-tooltip';
           tooltip.textContent = employer.company + (isNewEmployer ? ' (New)' : '');
