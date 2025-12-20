@@ -1,7 +1,13 @@
-interface Employer {
-  company: string;
-  logo: string;
-}
+import {
+  Employer,
+  extractProfileIdFromUrl,
+  isLinkedInProfileUrl,
+  extractProfileNameFromTitle,
+  extractFirstPartBeforeMiddleDot,
+  getCompanyInitials,
+  isDurationString,
+  isNewEmployer,
+} from './utils';
 
 interface SocialNote {
   name: string;
@@ -279,9 +285,9 @@ document.addEventListener('DOMContentLoaded', (): void => {
           const logoWrapper: HTMLDivElement = document.createElement('div');
           logoWrapper.className = 'company-logo-wrapper';
 
-          const isNewEmployer: boolean = !isFirstVisit && !savedCompanyNames.includes(employer.company.toLowerCase());
+          const employerIsNew: boolean = isNewEmployer(employer, savedEmployers, isFirstVisit);
 
-          if (isNewEmployer) {
+          if (employerIsNew) {
             console.log(`New employer found: ${employer.company}`);
             const newIndicator: HTMLDivElement = document.createElement('div');
             newIndicator.className = 'company-logo-new';
@@ -306,7 +312,7 @@ document.addEventListener('DOMContentLoaded', (): void => {
 
           const tooltip: HTMLSpanElement = document.createElement('span');
           tooltip.className = 'company-logo-tooltip';
-          tooltip.textContent = employer.company + (isNewEmployer ? ' (New)' : '');
+          tooltip.textContent = employer.company + (employerIsNew ? ' (New)' : '');
           logoWrapper.appendChild(tooltip);
 
           logosContainer.appendChild(logoWrapper);
@@ -332,14 +338,7 @@ document.addEventListener('DOMContentLoaded', (): void => {
     logoPlaceholder.style.fontWeight = 'bold';
     logoPlaceholder.style.fontSize = '12px';
 
-    const initials: string = companyName
-      .split(' ')
-      .map((word: string) => word.charAt(0))
-      .slice(0, 2)
-      .join('')
-      .toUpperCase();
-
-    logoPlaceholder.textContent = initials;
+    logoPlaceholder.textContent = getCompanyInitials(companyName);
     container.appendChild(logoPlaceholder);
   }
 

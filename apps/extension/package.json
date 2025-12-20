@@ -5,10 +5,16 @@
   "scripts": {
     "build": "npx tsc src/popup.ts --outDir dist --target ES2017 --lib ES2017,DOM --skipLibCheck && npx tsc src/settings.ts --outDir dist --target ES2017 --lib ES2017,DOM --skipLibCheck",
     "watch": "npx tsc src/popup.ts --outDir dist --target ES2017 --lib ES2017,DOM --skipLibCheck --watch & npx tsc src/settings.ts --outDir dist --target ES2017 --lib ES2017,DOM --skipLibCheck --watch",
-    "dev": "npm run build"
+    "dev": "npm run build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.268",
-    "typescript": "^5.5.4"
+    "@vitest/coverage-v8": "^4.0.16",
+    "jsdom": "^27.3.0",
+    "typescript": "^5.5.4",
+    "vitest": "^4.0.16"
   }
 }
