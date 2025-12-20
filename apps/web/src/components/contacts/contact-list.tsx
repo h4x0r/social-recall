@@ -1,7 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { useSkillInference } from "@/hooks/use-skill-inference";
+import { Sparkles, Loader2 } from "lucide-react";
 
 // Mock data - will be replaced with real data from Supabase
 const mockContacts = [
@@ -59,6 +63,18 @@ const mockContacts = [
     lastUpdated: "2 weeks ago",
     isNew: false,
   },
+  {
+    id: "6",
+    name: "James Wright",
+    headline: "Founder & CEO @ SecureStack",
+    employers: [
+      { company: "SecureStack", logo: "" },
+      { company: "Palo Alto Networks", logo: "" },
+    ],
+    skills: [],
+    lastUpdated: "3 weeks ago",
+    isNew: false,
+  },
 ];
 
 export function ContactList() {
@@ -81,11 +97,32 @@ interface ContactCardProps {
 }
 
 function ContactCard({ contact, className }: ContactCardProps) {
+  const [displaySkills, setDisplaySkills] = useState<string[]>(contact.skills);
+  const { inferSkills, isLoading, error } = useSkillInference();
+
   const initials = contact.name
     .split(" ")
     .map((n) => n[0])
     .join("")
     .toUpperCase();
+
+  const handleInferSkills = async () => {
+    await inferSkills({
+      id: contact.id,
+      name: contact.name,
+      headline: contact.headline,
+      employers: contact.employers,
+    });
+
+    // Get from cache after inference
+    const cached = localStorage.getItem(`skills:${contact.id}`);
+    if (cached) {
+      const data = JSON.parse(cached);
+      setDisplaySkills(data.skills.map((s: { name: string }) => s.name));
+    }
+  };
+
+  const hasNoSkills = displaySkills.length === 0;
 
   return (
     <div
@@ -116,8 +153,8 @@ function ContactCard({ contact, className }: ContactCardProps) {
         </div>
 
         {/* Skills */}
-        <div className="flex flex-wrap gap-1.5">
-          {contact.skills.slice(0, 3).map((skill) => (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {displaySkills.slice(0, 3).map((skill) => (
             <Badge
               key={skill}
               variant="secondary"
@@ -126,17 +163,44 @@ function ContactCard({ contact, className }: ContactCardProps) {
               {skill}
             </Badge>
           ))}
-          {contact.skills.length > 3 && (
+          {displaySkills.length > 3 && (
             <Badge variant="outline" className="text-xs font-normal">
-              +{contact.skills.length - 3}
+              +{displaySkills.length - 3}
             </Badge>
+          )}
+          {hasNoSkills && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 gap-1 px-2 text-xs text-muted-foreground hover:text-primary"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleInferSkills();
+              }}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Inferring...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-3 w-3" />
+                  Infer Skills
+                </>
+              )}
+            </Button>
+          )}
+          {error && (
+            <span className="text-xs text-destructive">{error}</span>
           )}
         </div>
       </div>
 
       {/* Employers */}
       <div className="hidden shrink-0 sm:flex items-center -space-x-2">
-        {contact.employers.slice(0, 3).map((employer, i) => (
+        {contact.employers.slice(0, 3).map((employer) => (
           <div
             key={employer.company}
             className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-card bg-secondary text-[10px] font-bold"
