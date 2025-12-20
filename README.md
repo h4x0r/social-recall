@@ -1,14 +1,14 @@
 # Social Recall
 
-Personal CRM for **serial entrepreneurs** and **angel investors**. Turn your professional network into a queryable, opportunity-aware knowledge graph.
+**Founders Network Intelligence.** Turn your professional network into a queryable, opportunity-aware knowledge graph.
 
 ## Who It's For
 
-**Serial entrepreneurs** who prioritize personal networking and orchestrate grand strategies by integrating talent across niches to form projects. You think in terms of "who do I know that can..." and need a system that remembers context as deeply as you do.
+**Serial entrepreneurs** who think in terms of "who do I know that can..." and need a system that remembers context as deeply as they do. You orchestrate projects by integrating talent across niches—your network is your operating system.
 
 **Angel investors** who leverage weak ties through mutual connections. Your deal flow comes from intros, and knowing *how* you know someone—who introduced you, what you co-invested in, where you crossed paths—is as important as knowing *that* you know them.
 
-If you measure success by the quality of your network and the opportunities it surfaces, Social Recall is built for you.
+Your network is your edge. Social Recall makes it queryable.
 
 ## Features
 
