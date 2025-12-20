@@ -11,7 +11,7 @@ export interface InferredSkill {
 export interface ProfileInput {
   id: string;
   name: string;
-  headline: string;
+  headline: string | null;
   employers?: Array<{ company: string; logo: string }>;
   notes?: string;
 }

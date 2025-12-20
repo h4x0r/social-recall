@@ -4,107 +4,117 @@ import { useState } from "react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useSkillInference } from "@/hooks/use-skill-inference";
+import { useContacts } from "@/hooks/use-contacts";
 import { ContactDetail } from "./contact-detail";
-import { Sparkles, Loader2 } from "lucide-react";
+import { Sparkles, Loader2, RefreshCw, Users } from "lucide-react";
 
-type Contact = {
+// Contact type for display (combines DB data with computed fields)
+interface DisplayContact {
   id: string;
   name: string;
-  headline: string;
+  headline: string | null;
   employers: { company: string; logo: string }[];
   skills: string[];
   lastUpdated: string;
   isNew: boolean;
-};
+}
 
-// Mock data - will be replaced with real data from Supabase
-const mockContacts = [
-  {
-    id: "1",
-    name: "Sarah Chen",
-    headline: "Partner @ Sequoia Capital",
-    employers: [
-      { company: "Sequoia Capital", logo: "" },
-      { company: "Goldman Sachs", logo: "" },
-    ],
-    skills: ["Venture Capital", "Fintech", "B2B SaaS"],
-    lastUpdated: "2 hours ago",
-    isNew: true,
-  },
-  {
-    id: "2",
-    name: "Marcus Johnson",
-    headline: "CTO @ Stealth Startup",
-    employers: [{ company: "Stealth", logo: "" }, { company: "Meta", logo: "" }],
-    skills: ["AI/ML", "Infrastructure", "Distributed Systems"],
-    lastUpdated: "1 day ago",
-    isNew: false,
-  },
-  {
-    id: "3",
-    name: "Elena Rodriguez",
-    headline: "CISO @ Cloudflare",
-    employers: [
-      { company: "Cloudflare", logo: "" },
-      { company: "Cisco", logo: "" },
-    ],
-    skills: ["Cloud Security", "Zero Trust", "Incident Response"],
-    lastUpdated: "3 days ago",
-    isNew: false,
-  },
-  {
-    id: "4",
-    name: "David Kim",
-    headline: "Founder & CEO @ BuildFast",
-    employers: [{ company: "BuildFast", logo: "" }],
-    skills: ["Developer Tools", "Product", "Go-to-Market"],
-    lastUpdated: "1 week ago",
-    isNew: false,
-  },
-  {
-    id: "5",
-    name: "Amanda Okonkwo",
-    headline: "VP Engineering @ Stripe",
-    employers: [
-      { company: "Stripe", logo: "" },
-      { company: "Uber", logo: "" },
-    ],
-    skills: ["Payments", "Platform", "Engineering Leadership"],
-    lastUpdated: "2 weeks ago",
-    isNew: false,
-  },
-  {
-    id: "6",
-    name: "James Wright",
-    headline: "Founder & CEO @ SecureStack",
-    employers: [
-      { company: "SecureStack", logo: "" },
-      { company: "Palo Alto Networks", logo: "" },
-    ],
-    skills: [],
-    lastUpdated: "3 weeks ago",
-    isNew: false,
-  },
-];
+// Format relative time from date string
+function formatRelativeTime(dateString: string): string {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
-export function ContactList() {
-  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays < 7) return `${diffDays} days ago`;
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+  if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
+  return `${Math.floor(diffDays / 365)} years ago`;
+}
+
+interface ContactListProps {
+  search?: string;
+}
+
+export function ContactList({ search }: ContactListProps = {}) {
+  const { contacts, isLoading, error, totalCount, refresh } = useContacts({ search });
+  const [selectedContact, setSelectedContact] = useState<DisplayContact | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
 
-  const handleContactClick = (contact: Contact) => {
+  // Transform DB contacts to display format
+  const displayContacts: DisplayContact[] = contacts.map((c) => ({
+    id: c.id,
+    name: c.name,
+    headline: c.headline,
+    employers: [], // TODO: Fetch employers separately or join in query
+    skills: [], // TODO: Fetch skills separately
+    lastUpdated: formatRelativeTime(c.updatedAt),
+    isNew: c.isNew,
+  }));
+
+  const handleContactClick = (contact: DisplayContact) => {
     setSelectedContact(contact);
     setDetailOpen(true);
   };
 
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="space-y-3">
+        {[...Array(5)].map((_, i) => (
+          <div
+            key={i}
+            className="flex items-center gap-4 rounded-lg border border-border bg-card p-4"
+          >
+            <Skeleton className="h-12 w-12 rounded-full" />
+            <div className="flex-1 space-y-2">
+              <Skeleton className="h-5 w-1/3" />
+              <Skeleton className="h-4 w-1/2" />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-6 text-center">
+        <p className="text-destructive mb-4">{error}</p>
+        <Button variant="outline" size="sm" onClick={refresh}>
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Try Again
+        </Button>
+      </div>
+    );
+  }
+
+  // Empty state
+  if (displayContacts.length === 0) {
+    return (
+      <div className="rounded-lg border border-border bg-card p-8 text-center">
+        <Users className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+        <h3 className="font-display text-lg mb-2">No contacts yet</h3>
+        <p className="text-muted-foreground text-sm mb-4">
+          Use the Chrome extension to save LinkedIn profiles, or sync your Google Contacts.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <>
       <div className="space-y-3">
-        {mockContacts.map((contact, index) => (
+        {displayContacts.map((contact, index) => (
           <ContactCard
             key={contact.id}
             contact={contact}
-            className={`stagger-${index + 1}`}
+            className={`stagger-${Math.min(index + 1, 6)}`}
             onClick={() => handleContactClick(contact)}
           />
         ))}
@@ -120,7 +130,7 @@ export function ContactList() {
 }
 
 interface ContactCardProps {
-  contact: (typeof mockContacts)[0];
+  contact: DisplayContact;
   className?: string;
   onClick?: () => void;
 }

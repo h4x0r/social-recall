@@ -10,8 +10,23 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { useAuth } from "@/hooks/use-auth";
 
 export function Header() {
+  const { user, signOut } = useAuth();
+
+  const handleSignOut = async () => {
+    await signOut();
+  };
+
+  const initials = user?.name
+    ? user.name
+        .split(" ")
+        .map((n) => n[0])
+        .join("")
+        .toUpperCase()
+        .slice(0, 2)
+    : user?.email?.slice(0, 2).toUpperCase() || "U";
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
@@ -65,7 +80,7 @@ export function Header() {
               >
                 <Avatar className="h-9 w-9 border border-border">
                   <AvatarFallback className="bg-secondary text-sm font-medium">
-                    AC
+                    {initials}
                   </AvatarFallback>
                 </Avatar>
               </Button>
@@ -74,13 +89,13 @@ export function Header() {
               <div className="flex items-center gap-2 p-2">
                 <Avatar className="h-8 w-8">
                   <AvatarFallback className="bg-secondary text-xs">
-                    AC
+                    {initials}
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex flex-col">
-                  <span className="text-sm font-medium">Alex Chen</span>
+                  <span className="text-sm font-medium">{user?.name || "User"}</span>
                   <span className="text-xs text-muted-foreground">
-                    alex@example.com
+                    {user?.email || ""}
                   </span>
                 </div>
               </div>
@@ -94,7 +109,10 @@ export function Header() {
                 Sync Status
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-destructive focus:text-destructive">
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onClick={handleSignOut}
+              >
                 <LogOutIcon className="mr-2 h-4 w-4" />
                 Sign Out
               </DropdownMenuItem>

@@ -2,14 +2,21 @@
  * Supabase client and AI inference helpers
  */
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from './database.types';
 
-// Environment variables
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+// Environment variables with fallbacks for build time
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key';
 
-// Create Supabase client
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Create typed Supabase client
+export const supabase: SupabaseClient<Database> = createClient<Database>(supabaseUrl, supabaseAnonKey);
+
+// Re-export repository factories for dependency injection
+export { createContactRepository } from './contact-repository';
+export type { ContactRepository } from './contact-repository';
+export { createOpportunityRepository } from './opportunity-repository';
+export type { OpportunityRepository, Opportunity } from './opportunity-repository';
 
 // Types for AI inference responses
 export interface InferSkillsResponse {

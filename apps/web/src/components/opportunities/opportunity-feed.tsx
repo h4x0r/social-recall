@@ -2,34 +2,48 @@
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useOpportunities } from "@/hooks/use-opportunities";
+import { RefreshCw, Zap } from "lucide-react";
+import type { Opportunity } from "@/lib/opportunity-repository";
+import type { OpportunityType } from "@/lib/opportunities";
 
-// Mock data - will be replaced with real data from Supabase
-const mockOpportunities = [
-  {
-    id: "1",
-    type: "new_company" as const,
-    contactName: "Sarah Chen",
-    description: "Left Sequoia to start a new fintech company",
-    detectedAt: "2 hours ago",
-    relevance: "You invested in her last company",
-  },
-  {
-    id: "2",
-    type: "role_change" as const,
-    contactName: "Marcus Johnson",
-    description: "Now CTO at stealth AI startup",
-    detectedAt: "1 day ago",
-    relevance: "Former Meta colleague, AI/ML expert",
-  },
-  {
-    id: "3",
-    type: "left_job" as const,
-    contactName: "Elena Rodriguez",
-    description: "Departing Cloudflare after 4 years",
-    detectedAt: "3 days ago",
-    relevance: "Top security talent, could advise portfolio",
-  },
-];
+// Display opportunity with contact info and relative time
+interface DisplayOpportunity {
+  id: string;
+  type: OpportunityType;
+  contactName: string;
+  description: string;
+  detectedAt: string;
+}
+
+// Format relative time from ISO date string
+function formatRelativeTime(dateString: string): string {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffHours < 1) return "Just now";
+  if (diffHours === 1) return "1 hour ago";
+  if (diffHours < 24) return `${diffHours} hours ago`;
+  if (diffDays === 1) return "1 day ago";
+  if (diffDays < 7) return `${diffDays} days ago`;
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+  return `${Math.floor(diffDays / 30)} months ago`;
+}
+
+// Transform API opportunity to display format
+function toDisplayOpportunity(opp: Opportunity): DisplayOpportunity {
+  return {
+    id: opp.id,
+    type: opp.type,
+    contactName: opp.contact.name,
+    description: opp.description,
+    detectedAt: formatRelativeTime(opp.detectedAt),
+  };
+}
 
 const opportunityTypeConfig = {
   new_company: {
@@ -50,13 +64,67 @@ const opportunityTypeConfig = {
 };
 
 export function OpportunityFeed() {
+  const { opportunities, isLoading, error, refresh, dismiss } = useOpportunities();
+
+  // Transform to display format
+  const displayOpportunities = opportunities.map(toDisplayOpportunity);
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        {[...Array(3)].map((_, i) => (
+          <div
+            key={i}
+            className="rounded-lg border border-border bg-card p-4"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <Skeleton className="h-5 w-24" />
+              <Skeleton className="h-4 w-16" />
+            </div>
+            <Skeleton className="h-5 w-1/3 mb-2" />
+            <Skeleton className="h-4 w-2/3 mb-3" />
+            <Skeleton className="h-8 w-full" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-6 text-center">
+        <p className="text-destructive mb-4">{error}</p>
+        <Button variant="outline" size="sm" onClick={refresh}>
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Try Again
+        </Button>
+      </div>
+    );
+  }
+
+  // Empty state
+  if (displayOpportunities.length === 0) {
+    return (
+      <div className="rounded-lg border border-border bg-card p-8 text-center">
+        <Zap className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+        <h3 className="font-display text-lg mb-2">No opportunities yet</h3>
+        <p className="text-muted-foreground text-sm">
+          We&apos;ll surface opportunities as your contacts make career moves.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
-      {mockOpportunities.map((opportunity, index) => (
+      {displayOpportunities.map((opportunity, index) => (
         <OpportunityCard
           key={opportunity.id}
           opportunity={opportunity}
           className={`stagger-${index + 1}`}
+          onDismiss={() => dismiss(opportunity.id)}
         />
       ))}
     </div>
@@ -64,11 +132,12 @@ export function OpportunityFeed() {
 }
 
 interface OpportunityCardProps {
-  opportunity: (typeof mockOpportunities)[0];
+  opportunity: DisplayOpportunity;
   className?: string;
+  onDismiss?: () => void;
 }
 
-function OpportunityCard({ opportunity, className }: OpportunityCardProps) {
+function OpportunityCard({ opportunity, className, onDismiss }: OpportunityCardProps) {
   const config = opportunityTypeConfig[opportunity.type];
   const Icon = config.icon;
 
@@ -96,24 +165,24 @@ function OpportunityCard({ opportunity, className }: OpportunityCardProps) {
       </h4>
 
       {/* Description */}
-      <p className="text-sm text-muted-foreground mb-3">
+      <p className="text-sm text-muted-foreground mb-4">
         {opportunity.description}
       </p>
-
-      {/* AI Relevance hint */}
-      <div className="mb-4 rounded-md bg-secondary/50 px-3 py-2">
-        <p className="text-xs text-muted-foreground">
-          <SparklesIcon className="mr-1 inline h-3 w-3 text-primary" />
-          {opportunity.relevance}
-        </p>
-      </div>
 
       {/* Actions */}
       <div className="flex gap-2">
         <Button size="sm" variant="outline" className="flex-1 text-xs">
           View Profile
         </Button>
-        <Button size="sm" variant="ghost" className="text-xs text-muted-foreground">
+        <Button
+          size="sm"
+          variant="ghost"
+          className="text-xs text-muted-foreground"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDismiss?.();
+          }}
+        >
           Dismiss
         </Button>
       </div>

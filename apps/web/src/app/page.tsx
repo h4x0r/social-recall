@@ -1,14 +1,22 @@
-import { Suspense } from "react";
+"use client";
+
+import { Suspense, useState, useDeferredValue } from "react";
 import { ContactList } from "@/components/contacts/contact-list";
 import { OpportunityFeed } from "@/components/opportunities/opportunity-feed";
 import { SearchBar } from "@/components/search/search-bar";
 import { Header } from "@/components/layout/header";
 import { Skeleton } from "@/components/ui/skeleton";
+import { AuthGuard } from "@/components/auth/auth-guard";
 
 export default function DashboardPage() {
+  const [searchQuery, setSearchQuery] = useState("");
+  // Use deferred value to avoid blocking input during search
+  const deferredSearch = useDeferredValue(searchQuery);
+
   return (
-    <div className="min-h-screen">
-      <Header />
+    <AuthGuard>
+      <div className="min-h-screen">
+        <Header />
 
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         {/* Hero Section */}
@@ -25,7 +33,7 @@ export default function DashboardPage() {
 
         {/* Search */}
         <section className="mb-10 animate-fade-in-up stagger-1">
-          <SearchBar />
+          <SearchBar value={searchQuery} onChange={setSearchQuery} />
         </section>
 
         {/* Main Grid */}
@@ -39,7 +47,7 @@ export default function DashboardPage() {
               </span>
             </div>
             <Suspense fallback={<ContactListSkeleton />}>
-              <ContactList />
+              <ContactList search={deferredSearch || undefined} />
             </Suspense>
           </section>
 
@@ -57,7 +65,8 @@ export default function DashboardPage() {
           </aside>
         </div>
       </main>
-    </div>
+      </div>
+    </AuthGuard>
   );
 }
 

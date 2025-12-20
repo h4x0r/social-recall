@@ -1,3 +1,14 @@
+import {
+  syncAllContacts,
+  isLoggedIn,
+  getSyncToken,
+  setSyncToken,
+  clearSyncToken,
+  openLoginPage,
+  getWebAppUrl,
+  setWebAppUrl,
+} from './sync';
+
 interface SocialNote {
   name: string;
   text: string;
@@ -15,9 +26,111 @@ interface StorageResult {
   socialNotes?: SocialNotes;
 }
 
-document.addEventListener('DOMContentLoaded', (): void => {
+document.addEventListener('DOMContentLoaded', async (): Promise<void> => {
   const exportDataButton = document.getElementById('exportData') as HTMLElement;
   const importDataButton = document.getElementById('importData') as HTMLElement;
+  const syncButton = document.getElementById('syncButton') as HTMLButtonElement;
+  const connectButton = document.getElementById('connectButton') as HTMLButtonElement;
+  const disconnectButton = document.getElementById('disconnectButton') as HTMLButtonElement;
+  const syncStatus = document.getElementById('syncStatus') as HTMLElement;
+  const webAppUrlInput = document.getElementById('webAppUrl') as HTMLInputElement;
+  const saveUrlButton = document.getElementById('saveUrlButton') as HTMLButtonElement;
+
+  // Initialize sync UI
+  await updateSyncUI();
+
+  // Load saved web app URL
+  const savedUrl = await getWebAppUrl();
+  if (webAppUrlInput) {
+    webAppUrlInput.value = savedUrl;
+  }
+
+  // Save web app URL
+  if (saveUrlButton) {
+    saveUrlButton.addEventListener('click', async () => {
+      const url = webAppUrlInput.value.trim();
+      if (url) {
+        await setWebAppUrl(url);
+        showStatus('Web app URL saved!', 'success');
+      }
+    });
+  }
+
+  // Connect button - open web app for login
+  if (connectButton) {
+    connectButton.addEventListener('click', () => {
+      openLoginPage();
+      showStatus('Opening Social Recall... Complete login then paste your token below.', 'info');
+    });
+  }
+
+  // Disconnect button
+  if (disconnectButton) {
+    disconnectButton.addEventListener('click', async () => {
+      await clearSyncToken();
+      await updateSyncUI();
+      showStatus('Disconnected from Social Recall', 'info');
+    });
+  }
+
+  // Sync button
+  if (syncButton) {
+    syncButton.addEventListener('click', async () => {
+      syncButton.disabled = true;
+      syncButton.textContent = 'Syncing...';
+      showStatus('Syncing contacts...', 'info');
+
+      const result = await syncAllContacts();
+
+      syncButton.disabled = false;
+      syncButton.textContent = 'Sync Now';
+
+      if (result.success) {
+        showStatus(`Synced ${result.synced} contacts successfully!`, 'success');
+      } else {
+        showStatus(`Sync failed: ${result.error}`, 'error');
+      }
+    });
+  }
+
+  // Listen for token input (manual paste)
+  const tokenInput = document.getElementById('tokenInput') as HTMLInputElement;
+  const saveTokenButton = document.getElementById('saveTokenButton') as HTMLButtonElement;
+
+  if (saveTokenButton && tokenInput) {
+    saveTokenButton.addEventListener('click', async () => {
+      const token = tokenInput.value.trim();
+      if (token) {
+        await setSyncToken(token);
+        tokenInput.value = '';
+        await updateSyncUI();
+        showStatus('Connected to Social Recall!', 'success');
+      }
+    });
+  }
+
+  async function updateSyncUI(): Promise<void> {
+    const loggedIn = await isLoggedIn();
+
+    if (syncButton) syncButton.style.display = loggedIn ? 'block' : 'none';
+    if (disconnectButton) disconnectButton.style.display = loggedIn ? 'block' : 'none';
+    if (connectButton) connectButton.style.display = loggedIn ? 'none' : 'block';
+
+    const tokenSection = document.getElementById('tokenSection');
+    if (tokenSection) tokenSection.style.display = loggedIn ? 'none' : 'block';
+
+    if (syncStatus) {
+      syncStatus.textContent = loggedIn ? 'Connected to Social Recall' : 'Not connected';
+      syncStatus.className = loggedIn ? 'status-connected' : 'status-disconnected';
+    }
+  }
+
+  function showStatus(message: string, type: 'success' | 'error' | 'info'): void {
+    if (syncStatus) {
+      syncStatus.textContent = message;
+      syncStatus.className = `status-${type}`;
+    }
+  }
 
   exportDataButton.addEventListener('click', (): void => {
     chrome.storage.sync.get(['socialNotes'], (result: StorageResult): void => {
