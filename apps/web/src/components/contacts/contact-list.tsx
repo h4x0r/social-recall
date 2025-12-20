@@ -5,7 +5,18 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useSkillInference } from "@/hooks/use-skill-inference";
+import { ContactDetail } from "./contact-detail";
 import { Sparkles, Loader2 } from "lucide-react";
+
+type Contact = {
+  id: string;
+  name: string;
+  headline: string;
+  employers: { company: string; logo: string }[];
+  skills: string[];
+  lastUpdated: string;
+  isNew: boolean;
+};
 
 // Mock data - will be replaced with real data from Supabase
 const mockContacts = [
@@ -78,25 +89,43 @@ const mockContacts = [
 ];
 
 export function ContactList() {
+  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+
+  const handleContactClick = (contact: Contact) => {
+    setSelectedContact(contact);
+    setDetailOpen(true);
+  };
+
   return (
-    <div className="space-y-3">
-      {mockContacts.map((contact, index) => (
-        <ContactCard
-          key={contact.id}
-          contact={contact}
-          className={`stagger-${index + 1}`}
-        />
-      ))}
-    </div>
+    <>
+      <div className="space-y-3">
+        {mockContacts.map((contact, index) => (
+          <ContactCard
+            key={contact.id}
+            contact={contact}
+            className={`stagger-${index + 1}`}
+            onClick={() => handleContactClick(contact)}
+          />
+        ))}
+      </div>
+
+      <ContactDetail
+        contact={selectedContact}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+      />
+    </>
   );
 }
 
 interface ContactCardProps {
   contact: (typeof mockContacts)[0];
   className?: string;
+  onClick?: () => void;
 }
 
-function ContactCard({ contact, className }: ContactCardProps) {
+function ContactCard({ contact, className, onClick }: ContactCardProps) {
   const [displaySkills, setDisplaySkills] = useState<string[]>(contact.skills);
   const { inferSkills, isLoading, error } = useSkillInference();
 
@@ -127,6 +156,15 @@ function ContactCard({ contact, className }: ContactCardProps) {
   return (
     <div
       className={`group relative flex items-start gap-4 rounded-lg border border-border bg-card p-4 transition-all card-hover cursor-pointer animate-fade-in-up ${className}`}
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick?.();
+        }
+      }}
     >
       {/* New indicator */}
       {contact.isNew && (
