@@ -31,20 +31,22 @@ export const metadata: Metadata = {
     template: "%s | Social Recall",
   },
   description:
-    "Personal CRM for investors and founders. Turn your professional network into a queryable, opportunity-aware knowledge graph.",
+    "Founders Network Intelligence. Turn your professional network into a queryable, opportunity-aware knowledge graph.",
   keywords: [
-    "CRM",
+    "founders",
+    "network intelligence",
     "LinkedIn",
     "contacts",
     "networking",
     "investors",
-    "founders",
+    "angel investors",
+    "serial entrepreneurs",
   ],
   authors: [{ name: "Social Recall" }],
   openGraph: {
-    title: "Social Recall",
+    title: "Social Recall — Founders Network Intelligence",
     description:
-      "Turn your professional network into a queryable, opportunity-aware knowledge graph.",
+      "Your network is your edge. Make it queryable.",
     type: "website",
   },
 };

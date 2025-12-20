@@ -64,10 +64,10 @@ export function LoginForm() {
     <div className="w-full max-w-sm mx-auto animate-fade-in-up">
       <div className="text-center mb-8">
         <h1 className="font-display text-3xl tracking-tight mb-2">
-          Welcome to <span className="text-gradient italic">Social Recall</span>
+          <span className="text-gradient italic">Social Recall</span>
         </h1>
         <p className="text-muted-foreground">
-          Your personal CRM for meaningful connections
+          Founders Network Intelligence
         </p>
       </div>
 

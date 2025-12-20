@@ -26,8 +26,8 @@ export default function DashboardPage() {
             <span className="text-gradient italic">Remembered</span>
           </h1>
           <p className="mt-4 max-w-2xl text-lg text-muted-foreground">
-            Never forget a connection. Surface opportunities. Find the right
-            person for any need.
+            Your network is your edge. Query it like a database. Surface the
+            right person for any need.
           </p>
         </section>
 
