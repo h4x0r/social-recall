@@ -1,5 +1,5 @@
 /**
- * Supabase client and Edge Function helpers
+ * Supabase client and AI inference helpers
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -11,7 +11,7 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 // Create Supabase client
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// Types for Edge Function responses
+// Types for AI inference responses
 export interface InferSkillsResponse {
   success: boolean;
   skills?: Array<{
@@ -34,22 +34,27 @@ export interface ProfileData {
 }
 
 /**
- * Calls the infer-skills Edge Function to extract skills from a profile
+ * Calls the Next.js API route to extract skills from a profile using Claude
  */
 export async function inferSkills(profile: ProfileData): Promise<InferSkillsResponse> {
   try {
-    const { data, error } = await supabase.functions.invoke('infer-skills', {
-      body: { profile },
+    const response = await fetch('/api/infer-skills', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ profile }),
     });
 
-    if (error) {
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
       return {
         success: false,
-        error: error.message,
+        error: errorData.error || `HTTP error: ${response.status}`,
       };
     }
 
-    return data as InferSkillsResponse;
+    return await response.json() as InferSkillsResponse;
   } catch (e) {
     return {
       success: false,
