@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
+import { generateText } from 'ai';
+import { anthropic } from '@ai-sdk/anthropic';
 
 // Skill taxonomy categories
 const SKILL_CATEGORIES = [
@@ -105,14 +105,6 @@ function parseResponse(text: string): InferredSkill[] {
 
 export async function POST(request: NextRequest) {
   try {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'ANTHROPIC_API_KEY not configured' },
-        { status: 500 }
-      );
-    }
-
     const { profile } = await request.json();
 
     if (!profile || !profile.name || !profile.headline) {
@@ -124,40 +116,16 @@ export async function POST(request: NextRequest) {
 
     const prompt = buildPrompt(profile);
 
-    const response = await fetch(ANTHROPIC_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-3-5-sonnet-20241022',
-        max_tokens: 1024,
-        messages: [
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-      }),
+    // Use Vercel AI SDK with Claude 3.5 Haiku
+    const { text, usage } = await generateText({
+      model: anthropic('claude-3-5-haiku-latest'),
+      prompt,
+      maxOutputTokens: 1024,
     });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Claude API error:', errorText);
-      return NextResponse.json(
-        { error: `Claude API error: ${response.status}` },
-        { status: 502 }
-      );
-    }
-
-    const data = await response.json();
-    const text = data.content?.[0]?.text;
 
     if (!text) {
       return NextResponse.json(
-        { error: 'Empty response from Claude' },
+        { error: 'Empty response from AI' },
         { status: 502 }
       );
     }
@@ -168,14 +136,15 @@ export async function POST(request: NextRequest) {
       success: true,
       skills,
       usage: {
-        input_tokens: data.usage?.input_tokens,
-        output_tokens: data.usage?.output_tokens,
+        input_tokens: usage?.inputTokens,
+        output_tokens: usage?.outputTokens,
       },
     });
   } catch (error) {
     console.error('API error:', error);
+    const message = error instanceof Error ? error.message : 'Internal server error';
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: message },
       { status: 500 }
     );
   }
