@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateText } from 'ai';
-import { anthropic } from '@ai-sdk/anthropic';
 
 // Skill taxonomy categories
 const SKILL_CATEGORIES = [
@@ -116,9 +115,10 @@ export async function POST(request: NextRequest) {
 
     const prompt = buildPrompt(profile);
 
-    // Use Vercel AI SDK with Claude 3.5 Haiku
+    // Use Vercel AI Gateway with Claude 3.5 Haiku
+    // Billing handled by Vercel ($5 free credits/month)
     const { text, usage } = await generateText({
-      model: anthropic('claude-3-5-haiku-latest'),
+      model: 'anthropic/claude-3-5-haiku' as Parameters<typeof generateText>[0]['model'],
       prompt,
       maxOutputTokens: 1024,
     });
