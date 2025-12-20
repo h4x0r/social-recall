@@ -1,0 +1,10 @@
+{
+  "name": "@social-recall/web",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Social Recall web application",
+  "scripts": {
+    "dev": "echo 'Web app not yet implemented'",
+    "build": "echo 'Web app not yet implemented'"
+  }
+}

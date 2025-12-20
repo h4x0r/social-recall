@@ -1,0 +1,14 @@
+{
+  "name": "@social-recall/extension",
+  "version": "0.0.5",
+  "description": "Chrome extension for Social Recall - save LinkedIn profiles with one click",
+  "scripts": {
+    "build": "npx tsc src/popup.ts --outDir dist --target ES2017 --lib ES2017,DOM --skipLibCheck && npx tsc src/settings.ts --outDir dist --target ES2017 --lib ES2017,DOM --skipLibCheck",
+    "watch": "npx tsc src/popup.ts --outDir dist --target ES2017 --lib ES2017,DOM --skipLibCheck --watch & npx tsc src/settings.ts --outDir dist --target ES2017 --lib ES2017,DOM --skipLibCheck --watch",
+    "dev": "npm run build"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.268",
+    "typescript": "^5.5.4"
+  }
+}

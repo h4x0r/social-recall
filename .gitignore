@@ -1,20 +1,43 @@
-# Python-generated files
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+
+# TypeScript
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# Mac
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Python (legacy)
 __pycache__/
 *.py[oc]
-build/
-dist/
 wheels/
 *.egg-info
 *.spec
-
-# Mac-generated files
-.DS_Store
-
-# Virtual environments
 .venv
+
+# Supabase
+supabase/.branches
+supabase/.temp
+
+# Misc
 mise.toml
-
-# IDE settings
-.vscode
-
-# Project artifacts
+.turbo
