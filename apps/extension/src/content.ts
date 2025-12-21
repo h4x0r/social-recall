@@ -472,30 +472,33 @@ async function waitForContentLoad(maxWaitMs: number = 15000): Promise<boolean> {
       }
     }
 
+    // Check for section headers - the key indicator that content has loaded
+    const sectionHeaders = document.querySelectorAll('.pvs-header__title, h2.pvs-header__title');
+    const headerTexts: string[] = [];
+    for (const h of sectionHeaders) {
+      const txt = h.textContent?.trim();
+      if (txt && txt.length > 2 && txt.length < 30) {
+        headerTexts.push(txt);
+      }
+    }
+    const hasSectionHeaders = headerTexts.length >= 2;
+
     // Check for "Experience" span specifically
-    const hasExperienceSpan = document.querySelector('.pvs-header__title')?.textContent?.includes('Experience') ||
-      Array.from(document.querySelectorAll('h2 span')).some(span => span.textContent?.trim() === 'Experience');
+    const hasExperienceSpan = headerTexts.some(t => t.toLowerCase().includes('experience'));
 
     // Check for profile name (in the main h1)
     const profileNameEl = document.querySelector('h1');
     const hasProfileName = profileNameEl?.textContent?.trim().length > 0;
 
-    // Check for company logos as indicator of loaded experience
-    const companyLogos = document.querySelectorAll('img[src*="company-logo"], img[src*="shrink_100"]');
-    const hasCompanyLogos = companyLogos.length > 0;
+    // Check for company logos as indicator of loaded experience (inside sections, not header)
+    const experienceLogos = document.querySelectorAll('section img[src*="company-logo"], section img[src*="shrink_100"]');
+    const hasExperienceLogos = experienceLogos.length > 0;
 
-    // Check for pvs-entity items (actual list items in sections)
-    const pvsEntities = document.querySelectorAll('.pvs-entity, [class*="pvs-entity"]');
-    const hasPvsEntities = pvsEntities.length > 3;
+    console.log(`[Social Recall] Content check: sections=${sections.length}, withContent=${sectionsWithContent}, headers=${headerTexts.length} (${headerTexts.slice(0,3).join(', ')}), expSpan=${hasExperienceSpan}, name=${hasProfileName}, logos=${experienceLogos.length}`);
 
-    // Check for loaded profile photo
-    const hasProfilePhoto = document.querySelector('img.pv-top-card-profile-picture__image, img[class*="profile-photo"]') !== null;
-
-    console.log(`[Social Recall] Content check: sections=${sections.length}, withContent=${sectionsWithContent}, expSpan=${hasExperienceSpan}, name=${hasProfileName}, logos=${companyLogos.length}, entities=${pvsEntities.length}, photo=${hasProfilePhoto}`);
-
-    // Content is ready when we have meaningful content indicators
-    // Name + (either sections with content, Experience header, company logos, or pvs-entity items)
-    if (hasProfileName && (sectionsWithContent >= 2 || hasExperienceSpan || hasCompanyLogos || hasPvsEntities)) {
+    // Content is ready when we have section headers loaded (the key indicator)
+    // Require: name + (section headers OR sections with content OR experience header with logos)
+    if (hasProfileName && (hasSectionHeaders || sectionsWithContent >= 2 || (hasExperienceSpan && hasExperienceLogos))) {
       console.log('[Social Recall] Content loaded successfully');
       return true;
     }
