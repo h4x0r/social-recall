@@ -500,6 +500,10 @@ async function waitForContentLoad(maxWaitMs: number = 20000): Promise<boolean> {
     const bodyText = document.body.textContent || '';
     const hasExperienceText = bodyText.includes('Experience') && bodyText.includes('Education');
 
+    // Check if main element has multiple children (profile sections loaded)
+    const mainEl = document.querySelector('main');
+    const mainChildCount = mainEl?.children.length || 0;
+
     // Check for profile name (in the main h1)
     const profileNameEl = document.querySelector('h1');
     const hasProfileName = profileNameEl?.textContent?.trim().length > 0;
@@ -511,17 +515,16 @@ async function waitForContentLoad(maxWaitMs: number = 20000): Promise<boolean> {
     const loaderSections = document.querySelectorAll('section[class*="pvs-loader"]');
     const hasLoaders = loaderSections.length > 0;
 
-    console.log(`[Social Recall] Content check: sections=${sections.length}, withContent=${sectionsWithContent}, pvsLists=${pvsLists.length}, h2s=${h2WithText} (${h2Texts.join(', ')}), hasExp=${hasExperienceText}, name=${hasProfileName}, logos=${experienceLogos.length}, loaders=${loaderSections.length}`);
+    console.log(`[Social Recall] Content check: sections=${sections.length}, withContent=${sectionsWithContent}, pvsLists=${pvsLists.length}, mainChildren=${mainChildCount}, h2s=${h2WithText}, hasExp=${hasExperienceText}, name=${hasProfileName}, loaders=${loaderSections.length}`);
 
     // Content is ready when we have:
     // 1. Profile name loaded
     // 2. NO loader sections (content fully loaded)
-    // 3. pvs-list containers OR multiple sections with content OR Experience text
+    // 3. Main has multiple children (profile sections) OR Experience/Education text visible
     const contentReady = hasProfileName && !hasLoaders && (
-      hasPvsLists ||  // pvs-list containers present (key indicator)
-      h2WithText >= 5 ||  // At least 5 h2s with text
-      sectionsWithContent >= 3 ||  // At least 3 sections with content
-      (hasExperienceText && experienceLogos.length > 0)  // Experience text and logos
+      mainChildCount >= 4 ||  // Main has multiple profile section children
+      hasExperienceText ||  // Experience and Education text visible
+      (sectionsWithContent >= 3 && h2WithText >= 3)  // Multiple sections with content
     );
 
     if (contentReady) {
