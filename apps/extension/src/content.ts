@@ -472,33 +472,41 @@ async function waitForContentLoad(maxWaitMs: number = 15000): Promise<boolean> {
       }
     }
 
-    // Check for section headers - the key indicator that content has loaded
-    const sectionHeaders = document.querySelectorAll('.pvs-header__title, h2.pvs-header__title');
-    const headerTexts: string[] = [];
-    for (const h of sectionHeaders) {
-      const txt = h.textContent?.trim();
-      if (txt && txt.length > 2 && txt.length < 30) {
-        headerTexts.push(txt);
+    // Check for h2 elements with actual text (key indicator content loaded)
+    const h2s = document.querySelectorAll('h2');
+    let h2WithText = 0;
+    const h2Texts: string[] = [];
+    for (const h2 of h2s) {
+      const txt = h2.textContent?.trim();
+      if (txt && txt.length > 2) {
+        h2WithText++;
+        if (h2Texts.length < 5) h2Texts.push(txt.slice(0, 20));
       }
     }
-    const hasSectionHeaders = headerTexts.length >= 2;
 
-    // Check for "Experience" span specifically
-    const hasExperienceSpan = headerTexts.some(t => t.toLowerCase().includes('experience'));
+    // Check for "Experience" text anywhere in body
+    const bodyText = document.body.textContent || '';
+    const hasExperienceText = bodyText.includes('Experience') && bodyText.includes('Education');
 
     // Check for profile name (in the main h1)
     const profileNameEl = document.querySelector('h1');
     const hasProfileName = profileNameEl?.textContent?.trim().length > 0;
 
-    // Check for company logos as indicator of loaded experience (inside sections, not header)
+    // Check for company logos inside sections
     const experienceLogos = document.querySelectorAll('section img[src*="company-logo"], section img[src*="shrink_100"]');
-    const hasExperienceLogos = experienceLogos.length > 0;
 
-    console.log(`[Social Recall] Content check: sections=${sections.length}, withContent=${sectionsWithContent}, headers=${headerTexts.length} (${headerTexts.slice(0,3).join(', ')}), expSpan=${hasExperienceSpan}, name=${hasProfileName}, logos=${experienceLogos.length}`);
+    console.log(`[Social Recall] Content check: sections=${sections.length}, withContent=${sectionsWithContent}, h2s=${h2WithText} (${h2Texts.join(', ')}), hasExp=${hasExperienceText}, name=${hasProfileName}, logos=${experienceLogos.length}`);
 
-    // Content is ready when we have section headers loaded (the key indicator)
-    // Require: name + (section headers OR sections with content OR experience header with logos)
-    if (hasProfileName && (hasSectionHeaders || sectionsWithContent >= 2 || (hasExperienceSpan && hasExperienceLogos))) {
+    // Content is ready when we have:
+    // 1. Profile name loaded
+    // 2. Multiple h2s with text OR sections with content OR Experience+Education text visible
+    const contentReady = hasProfileName && (
+      h2WithText >= 5 ||  // At least 5 h2s with text
+      sectionsWithContent >= 3 ||  // At least 3 sections with content
+      (hasExperienceText && experienceLogos.length > 0)  // Experience text and logos
+    );
+
+    if (contentReady) {
       console.log('[Social Recall] Content loaded successfully');
       return true;
     }
