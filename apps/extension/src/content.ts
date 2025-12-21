@@ -626,20 +626,42 @@ function extractAvatarUrl(): string | undefined {
 function debugLinkedInDOM(): void {
   console.log('[Social Recall] ===== DOM INSPECTION =====');
 
+  // Check overall page state
+  const mainContent = document.querySelector('main');
+  console.log(`[Social Recall] Main element: ${mainContent ? 'found' : 'NOT FOUND'}, children: ${mainContent?.children.length || 0}`);
+
   // Find all sections with artdeco-card class
   const sections = document.querySelectorAll('section.artdeco-card, section.pv-profile-card, section[class*="artdeco-card"]');
   console.log(`[Social Recall] Profile sections found: ${sections.length}`);
 
   sections.forEach((sec, i) => {
-    // Try to find ANY text that could be a header in the first few elements
+    const classes = sec.className.slice(0, 60);
+    const childCount = sec.children.length;
+    const textLen = sec.textContent?.trim().length || 0;
     const firstText = sec.textContent?.slice(0, 100).replace(/\s+/g, ' ').trim();
-    console.log(`[Social Recall] section[${i}]: "${firstText?.slice(0, 50)}..."`);
+    console.log(`[Social Recall] section[${i}]: children=${childCount}, textLen=${textLen}, classes="${classes}"`);
+    if (textLen > 0 && textLen < 200) {
+      console.log(`[Social Recall] section[${i}] text: "${firstText}"`);
+    }
   });
+
+  // Check for pvs-header__title elements directly
+  const pvsHeaders = document.querySelectorAll('.pvs-header__title');
+  console.log(`[Social Recall] pvs-header__title elements: ${pvsHeaders.length}`);
+  pvsHeaders.forEach((h, i) => {
+    console.log(`[Social Recall] header[${i}]: "${h.textContent?.trim().slice(0, 30)}"`);
+  });
+
+  // Check for any h2 elements
+  const h2s = document.querySelectorAll('h2');
+  console.log(`[Social Recall] h2 elements: ${h2s.length}`);
 
   // Find where "Experience" text actually lives
   const allSpans = document.querySelectorAll('span');
+  let expFound = false;
   for (const span of allSpans) {
     if (span.textContent?.trim() === 'Experience') {
+      expFound = true;
       const parent = span.parentElement;
       const grandparent = parent?.parentElement;
       console.log(`[Social Recall] "Experience" span parent: ${parent?.tagName}.${parent?.className.slice(0, 40)}`);
@@ -648,6 +670,9 @@ function debugLinkedInDOM(): void {
       console.log(`[Social Recall] "Experience" closest section: ${section?.className.slice(0, 50)}`);
       break;
     }
+  }
+  if (!expFound) {
+    console.log('[Social Recall] "Experience" span NOT FOUND in any span');
   }
 
   console.log('[Social Recall] ===== END DOM INSPECTION =====');
