@@ -523,13 +523,31 @@ async function waitForContentLoad(maxWaitMs: number = 20000): Promise<boolean> {
       return true;
     }
 
-    // If we haven't scrolled yet and we're past 3 seconds, scroll to trigger lazy load
-    if (!scrollTriggered && Date.now() - startTime > 3000) {
-      console.log('[Social Recall] Triggering scroll to load lazy content');
+    // If we haven't scrolled yet and we're past 2 seconds, scroll aggressively to trigger lazy load
+    if (!scrollTriggered && Date.now() - startTime > 2000) {
+      console.log('[Social Recall] Triggering aggressive scroll to load lazy content');
       scrollTriggered = true;
-      // Scroll down a bit to trigger lazy loading
-      window.scrollBy(0, 500);
-      await wait(200);
+
+      // Scroll through the entire page to trigger intersection observers
+      const scrollHeight = document.body.scrollHeight;
+      const viewportHeight = window.innerHeight;
+
+      // Scroll in chunks to trigger all lazy loads
+      for (let pos = 0; pos < scrollHeight; pos += viewportHeight) {
+        window.scrollTo(0, pos);
+        await wait(150);
+      }
+
+      // Scroll back to top
+      window.scrollTo(0, 0);
+      await wait(300);
+    }
+
+    // Second scroll attempt at 10 seconds if still no content
+    if (scrollTriggered && !hasExperienceText && Date.now() - startTime > 10000 && Date.now() - startTime < 11000) {
+      console.log('[Social Recall] Second scroll attempt');
+      window.scrollTo(0, document.body.scrollHeight / 2);
+      await wait(500);
       window.scrollTo(0, 0);
     }
 
