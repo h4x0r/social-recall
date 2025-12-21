@@ -1,11 +1,25 @@
 {
   "manifest_version": 3,
   "name": "Social Recall",
-  "version": "0.0.0.5",
+  "version": "0.0.0.6",
   "description": "Remind you of people you came across on social networks",
   "permissions": ["storage", "activeTab", "scripting"],
   "host_permissions": [
     "*://*.linkedin.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["*://*.linkedin.com/*"],
+      "js": ["content.js"],
+      "css": ["panel.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["panel.css", "tarot/*"],
+      "matches": ["*://*.linkedin.com/*"]
+    }
   ],
   "action": {
     "default_popup": "popup.html",

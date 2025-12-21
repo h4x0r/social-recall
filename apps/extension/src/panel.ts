@@ -9,28 +9,110 @@ export enum PanelState {
 }
 
 export enum Archetype {
+  // I - The Magician
   Builder = 'builder',
-  Architect = 'architect',
-  Designer = 'designer',
-  Scientist = 'scientist',
-  Strategist = 'strategist',
-  Seller = 'seller',
-  Marketer = 'marketer',
+  // II - The High Priestess
+  Advisor = 'advisor',
+  // III - The Empress
+  Creator = 'creator',
+  // IV - The Emperor
+  Executive = 'executive',
+  // VI - The Lovers
   Connector = 'connector',
-  Specialist = 'specialist',
+  // VII - The Chariot
+  Operator = 'operator',
+  // VIII - Strength
+  Seller = 'seller',
+  // IX - The Hermit
+  Researcher = 'researcher',
+  // XIV - Temperance
+  Integrator = 'integrator',
+  // XVII - The Star
+  Evangelist = 'evangelist',
+  // XX - Judgement
+  Investor = 'investor',
+  // ? - Unknown
+  Unknown = 'unknown',
 }
 
-// Map archetypes to tarot cards
+// Map archetypes to tarot cards (Major Arcana)
 const ARCHETYPE_TAROT: Record<Archetype, string> = {
   [Archetype.Builder]: 'magician',
-  [Archetype.Architect]: 'emperor',
-  [Archetype.Designer]: 'empress',
-  [Archetype.Scientist]: 'hermit',
-  [Archetype.Strategist]: 'chariot',
-  [Archetype.Seller]: 'strength',
-  [Archetype.Marketer]: 'star',
+  [Archetype.Advisor]: 'high-priestess',
+  [Archetype.Creator]: 'empress',
+  [Archetype.Executive]: 'emperor',
   [Archetype.Connector]: 'lovers',
-  [Archetype.Specialist]: 'high-priestess',
+  [Archetype.Operator]: 'chariot',
+  [Archetype.Seller]: 'strength',
+  [Archetype.Researcher]: 'hermit',
+  [Archetype.Integrator]: 'temperance',
+  [Archetype.Evangelist]: 'star',
+  [Archetype.Investor]: 'judgement',
+  [Archetype.Unknown]: 'unknown',
+};
+
+// Archetype descriptions for the builder/entrepreneur/investor ecosystem
+const ARCHETYPE_DESCRIPTIONS: Record<Archetype, { title: string; subtitle: string; description: string }> = {
+  [Archetype.Builder]: {
+    title: 'The Magician',
+    subtitle: 'The Builder',
+    description: 'Technical founders and engineers who turn ideas into reality. They wield code, systems, and tools to create products from nothing. Often the first hire or co-founder you need to ship.',
+  },
+  [Archetype.Advisor]: {
+    title: 'The High Priestess',
+    subtitle: 'The Advisor',
+    description: 'Keepers of hidden knowledge and institutional wisdom. Board members, executive coaches, and seasoned advisors who see what others miss. They speak rarely but their counsel shapes destinies.',
+  },
+  [Archetype.Creator]: {
+    title: 'The Empress',
+    subtitle: 'The Creator',
+    description: 'Creative forces who birth new ideas and nurture them to fruition. Designers, brand builders, and product visionaries who shape how things feel. They bring beauty and meaning to functional things.',
+  },
+  [Archetype.Executive]: {
+    title: 'The Emperor',
+    subtitle: 'The Executive',
+    description: 'Leaders who build structure and command respect. CEOs, presidents, and managing directors who create order from chaos. They establish the rules, set the culture, and hold the line.',
+  },
+  [Archetype.Connector]: {
+    title: 'The Lovers',
+    subtitle: 'The Connector',
+    description: 'Network weavers who make valuable introductions. They know everyone and understand who needs to meet whom. The person whose text gets returned by anyone in the ecosystem.',
+  },
+  [Archetype.Operator]: {
+    title: 'The Chariot',
+    subtitle: 'The Operator',
+    description: 'Execution machines who drive toward goals through sheer will. COOs, Chiefs of Staff, and program managers who make things happen. They turn strategy into results through discipline and focus.',
+  },
+  [Archetype.Seller]: {
+    title: 'Strength',
+    subtitle: 'The Seller',
+    description: 'Revenue generators who close deals through persistence and persuasion. They understand customer psychology and can sell vision as effectively as product. First sales hire material.',
+  },
+  [Archetype.Researcher]: {
+    title: 'The Hermit',
+    subtitle: 'The Researcher',
+    description: 'Deep thinkers who illuminate through solitary study. Scientists, analysts, and domain experts who find truth through rigorous investigation. They validate assumptions before you bet the company.',
+  },
+  [Archetype.Integrator]: {
+    title: 'Temperance',
+    subtitle: 'The Integrator',
+    description: 'Masters of balance who blend opposing forces. Product managers, generalists, and bridge-builders who synthesize different perspectives. They find harmony between competing priorities.',
+  },
+  [Archetype.Evangelist]: {
+    title: 'The Star',
+    subtitle: 'The Evangelist',
+    description: 'Beacons who inspire and attract through authentic sharing. Developer advocates, thought leaders, and community builders who draw others to the mission. They turn users into believers.',
+  },
+  [Archetype.Investor]: {
+    title: 'Judgement',
+    subtitle: 'The Investor',
+    description: 'Evaluators who decide which ventures deserve capital and support. Angels, VCs, and LPs who place bets on people and ideas. Their judgment determines who gets the chance to build.',
+  },
+  [Archetype.Unknown]: {
+    title: '?',
+    subtitle: 'Unknown',
+    description: 'A profile that doesn\'t clearly fit the core entrepreneurial archetypes. They may be early in their journey, in a specialized field, or simply haven\'t revealed enough to classify yet.',
+  },
 };
 
 export interface ProfileIntelligence {
@@ -54,6 +136,13 @@ export interface Position {
 
 export const FREE_PROFILE_LIMIT = 10;
 
+export interface ExtractionProgress {
+  step: string;
+  label: string;
+  progress: number; // 0-1
+  elapsed: number; // ms
+}
+
 export interface Panel {
   element: HTMLElement;
   getState: () => PanelState;
@@ -64,6 +153,8 @@ export interface Panel {
   setProfileCount: (count: number) => void;
   setAuthenticated: (authenticated: boolean) => void;
   showGate: () => void;
+  setMinimalMode: (minimal: boolean) => void;
+  setProgress: (progress: ExtractionProgress | null) => void;
 }
 
 function formatRelativeTime(date: Date): string {
@@ -87,6 +178,63 @@ function capitalizeFirst(str: string): string {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
+/**
+ * Show tarot card popup modal with Rider-Waite image and archetype description
+ */
+function showTarotPopup(archetype: Archetype): void {
+  // Remove existing popup if any
+  const existingPopup = document.querySelector('.sr-tarot-popup');
+  existingPopup?.remove();
+
+  // Normalize archetype - use Unknown if not in current set
+  const validArchetype = archetype && archetype in ARCHETYPE_TAROT ? archetype : Archetype.Unknown;
+  const tarotCard = ARCHETYPE_TAROT[validArchetype];
+  const info = ARCHETYPE_DESCRIPTIONS[validArchetype];
+  const cardImageUrl = chrome.runtime.getURL(`tarot/${tarotCard}.jpg`);
+
+  const popup = document.createElement('div');
+  popup.className = 'sr-tarot-popup';
+  popup.innerHTML = `
+    <div class="sr-tarot-popup__backdrop"></div>
+    <div class="sr-tarot-popup__content">
+      <button class="sr-tarot-popup__close">&times;</button>
+      <div class="sr-tarot-popup__card">
+        <img src="${cardImageUrl}" alt="${info.title}" />
+      </div>
+      <div class="sr-tarot-popup__info">
+        <h2 class="sr-tarot-popup__title">${info.title}</h2>
+        <h3 class="sr-tarot-popup__subtitle">${info.subtitle}</h3>
+        <p class="sr-tarot-popup__description">${info.description}</p>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(popup);
+
+  // Animate in
+  requestAnimationFrame(() => {
+    popup.classList.add('sr-tarot-popup--visible');
+  });
+
+  // Close handlers
+  const closePopup = () => {
+    popup.classList.remove('sr-tarot-popup--visible');
+    setTimeout(() => popup.remove(), 300);
+  };
+
+  popup.querySelector('.sr-tarot-popup__backdrop')?.addEventListener('click', closePopup);
+  popup.querySelector('.sr-tarot-popup__close')?.addEventListener('click', closePopup);
+
+  // Close on Escape key
+  const handleEscape = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      closePopup();
+      document.removeEventListener('keydown', handleEscape);
+    }
+  };
+  document.addEventListener('keydown', handleEscape);
+}
+
 export function createPanel(container: HTMLElement): Panel {
   let state: PanelState = PanelState.Minimized;
   let position: Position = { x: 20, y: 20 }; // Default bottom-right offset
@@ -104,6 +252,19 @@ export function createPanel(container: HTMLElement): Panel {
   const content = document.createElement('div');
   content.className = 'sr-panel__content';
   element.appendChild(content);
+
+  // Progress bar element
+  const progressBar = document.createElement('div');
+  progressBar.className = 'sr-panel__progress';
+  progressBar.innerHTML = `
+    <div class="sr-panel__progress-header">
+      <span class="sr-panel__progress-label">Loading...</span>
+      <span class="sr-panel__progress-time">0.0s</span>
+    </div>
+    <div class="sr-panel__progress-track">
+      <div class="sr-panel__progress-fill"></div>
+    </div>
+  `;
 
   container.appendChild(element);
 
@@ -124,7 +285,11 @@ export function createPanel(container: HTMLElement): Panel {
   }
 
   function setIntelligence(intelligence: ProfileIntelligence): void {
-    const tarotCard = ARCHETYPE_TAROT[intelligence.archetype];
+    // Normalize archetype - use Unknown if not in current set
+    const validArchetype = intelligence.archetype && intelligence.archetype in ARCHETYPE_TAROT
+      ? intelligence.archetype
+      : Archetype.Unknown;
+    const tarotCard = ARCHETYPE_TAROT[validArchetype];
 
     const jobAlertHtml = intelligence.jobChange
       ? `<div class="sr-panel__job-alert">
@@ -141,8 +306,8 @@ export function createPanel(container: HTMLElement): Panel {
       <div class="sr-panel__body">
         ${jobAlertHtml}
         <div class="sr-panel__archetype">
-          <div class="sr-panel__tarot" data-card="${tarotCard}"></div>
-          <span class="sr-panel__archetype-name">${capitalizeFirst(intelligence.archetype)}</span>
+          <div class="sr-panel__tarot sr-panel__tarot--clickable" data-card="${tarotCard}" title="Click to learn more"></div>
+          <span class="sr-panel__archetype-name">${capitalizeFirst(validArchetype)}</span>
         </div>
         <div class="sr-panel__skills">
           ${intelligence.skills.map(s => `<span class="sr-panel__skill">${s}</span>`).join(' · ')}
@@ -168,6 +333,13 @@ export function createPanel(container: HTMLElement): Panel {
 
     const minimizeBtn = content.querySelector('.sr-panel__minimize');
     minimizeBtn?.addEventListener('click', toggle);
+
+    // Add click handler for tarot card popup
+    const tarotEl = content.querySelector('.sr-panel__tarot');
+    tarotEl?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showTarotPopup(validArchetype);
+    });
   }
 
   function setPosition(x: number, y: number): void {
@@ -277,7 +449,65 @@ export function createPanel(container: HTMLElement): Panel {
     }
   }
 
-  orb.addEventListener('click', toggle);
+  let isMinimalMode = false;
+
+  function setMinimalMode(minimal: boolean): void {
+    isMinimalMode = minimal;
+    if (minimal) {
+      element.classList.add('sr-panel--minimal');
+      orb.title = 'Social Recall - Visit a profile to see intelligence';
+      // Ensure we're in minimized state
+      if (state === PanelState.Expanded) {
+        toggle();
+      }
+    } else {
+      element.classList.remove('sr-panel--minimal');
+      orb.title = '';
+    }
+  }
+
+  orb.addEventListener('click', () => {
+    // Don't toggle in minimal mode - just show tooltip
+    if (!isMinimalMode) {
+      toggle();
+    }
+  });
+
+  function setProgress(progress: ExtractionProgress | null): void {
+    const labelEl = progressBar.querySelector('.sr-panel__progress-label') as HTMLElement;
+    const timeEl = progressBar.querySelector('.sr-panel__progress-time') as HTMLElement;
+    const fillEl = progressBar.querySelector('.sr-panel__progress-fill') as HTMLElement;
+
+    if (!progress) {
+      // Hide progress bar
+      progressBar.remove();
+      progressBar.classList.remove('sr-panel__progress--complete');
+      return;
+    }
+
+    // Show progress bar in content area
+    if (!content.contains(progressBar)) {
+      content.insertBefore(progressBar, content.firstChild);
+    }
+
+    labelEl.textContent = progress.label;
+    timeEl.textContent = `${(progress.elapsed / 1000).toFixed(1)}s`;
+    fillEl.style.width = `${Math.round(progress.progress * 100)}%`;
+
+    if (progress.step === 'complete') {
+      progressBar.classList.add('sr-panel__progress--complete');
+      // Auto-expand panel to show results
+      if (state === PanelState.Minimized && !isMinimalMode) {
+        toggle();
+      }
+    } else {
+      progressBar.classList.remove('sr-panel__progress--complete');
+      // Auto-expand panel to show progress
+      if (state === PanelState.Minimized && !isMinimalMode) {
+        toggle();
+      }
+    }
+  }
 
   return {
     element,
@@ -289,5 +519,7 @@ export function createPanel(container: HTMLElement): Panel {
     setProfileCount,
     setAuthenticated,
     showGate,
+    setMinimalMode,
+    setProgress,
   };
 }

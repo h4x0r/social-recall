@@ -1,9 +1,5 @@
 # Supabase Configuration for Social Recall
 
-[project]
-id = "social-recall"
-name = "Social Recall"
-
 [api]
 enabled = true
 port = 54321

@@ -1,6 +1,6 @@
 /**
  * Social Recall Popup - Art Deco Style
- * Shows connection status, stats, and recent profiles
+ * Shows connection status, stats, recent profiles, and extraction progress
  */
 
 import { syncAllContacts, isLoggedIn, getWebAppUrl } from './sync';
@@ -22,6 +22,16 @@ interface StorageResult {
   syncToken?: string;
 }
 
+interface ExtractionProgress {
+  step: string;
+  stepLabel: string;
+  progress: number;
+  elapsed: number;
+  timestamp: number;
+  profileId?: string;
+  durationMs?: number;
+}
+
 document.addEventListener('DOMContentLoaded', async (): Promise<void> => {
   const statusDot = document.querySelector('.popup__status-dot') as HTMLElement;
   const statusText = document.getElementById('statusText') as HTMLElement;
@@ -30,6 +40,68 @@ document.addEventListener('DOMContentLoaded', async (): Promise<void> => {
   const recentList = document.getElementById('recentList') as HTMLElement;
   const syncBtn = document.getElementById('syncBtn') as HTMLButtonElement;
   const webAppBtn = document.getElementById('webAppBtn') as HTMLButtonElement;
+
+  // Progress elements
+  const progressSection = document.getElementById('progressSection') as HTMLElement;
+  const progressLabel = document.getElementById('progressLabel') as HTMLElement;
+  const progressTime = document.getElementById('progressTime') as HTMLElement;
+  const progressFill = document.getElementById('progressFill') as HTMLElement;
+
+  let lastProgressTimestamp = 0;
+  let hideTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  // Poll for extraction progress from storage
+  function checkProgress(): void {
+    chrome.storage.local.get(['extractionProgress'], (result) => {
+      const progress = result.extractionProgress as ExtractionProgress | undefined;
+
+      if (!progress || progress.timestamp === lastProgressTimestamp) {
+        return;
+      }
+
+      lastProgressTimestamp = progress.timestamp;
+
+      // Only show progress if it's recent (within last 30 seconds)
+      const isRecent = Date.now() - progress.timestamp < 30000;
+
+      if (!isRecent) {
+        progressSection.style.display = 'none';
+        return;
+      }
+
+      // Clear any pending hide timeout
+      if (hideTimeout) {
+        clearTimeout(hideTimeout);
+        hideTimeout = null;
+      }
+
+      progressSection.style.display = 'block';
+      progressLabel.textContent = progress.stepLabel;
+      progressTime.textContent = `${(progress.elapsed / 1000).toFixed(1)}s`;
+      progressFill.style.width = `${Math.round(progress.progress * 100)}%`;
+
+      if (progress.step === 'complete') {
+        progressSection.classList.add('popup__progress--complete');
+
+        // Hide after 3 seconds
+        hideTimeout = setTimeout(() => {
+          progressSection.style.display = 'none';
+          progressSection.classList.remove('popup__progress--complete');
+          progressFill.style.width = '0%';
+        }, 3000);
+
+        // Refresh stats and recent profiles
+        loadStats();
+        loadRecentProfiles();
+      } else {
+        progressSection.classList.remove('popup__progress--complete');
+      }
+    });
+  }
+
+  // Check progress immediately and every 500ms
+  checkProgress();
+  setInterval(checkProgress, 500);
 
   // Check connection status
   const connected = await isLoggedIn();

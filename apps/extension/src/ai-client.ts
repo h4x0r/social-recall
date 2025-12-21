@@ -8,10 +8,46 @@ export interface Employer {
   logo: string;
 }
 
+export interface Education {
+  school: string;
+  degree?: string;
+  field?: string;
+  dates?: string;
+}
+
+export interface Volunteering {
+  organization: string;
+  role?: string;
+  cause?: string;
+}
+
+export interface Certification {
+  name: string;
+  issuer?: string;
+  issueDate?: string;
+  expirationDate?: string;
+  credentialId?: string;
+  credentialUrl?: string;
+}
+
+export interface Activity {
+  type: 'post' | 'comment' | 'reaction';
+  text: string;
+  date?: string;
+}
+
 export interface ProfileData {
   name: string;
   headline: string;
+  about?: string;
   employers?: Employer[];
+  education?: Education[];
+  honorsAwards?: string[];
+  courses?: string[];
+  languages?: string[];
+  volunteering?: Volunteering[];
+  certifications?: Certification[];
+  activities?: Activity[];
   notes?: string;
 }
 

@@ -178,6 +178,146 @@ export interface DbContactNoteUpdate {
   content?: string;
 }
 
+// =============================================================================
+// MASTER PROFILES (Crowdsourced LinkedIn Data)
+// =============================================================================
+
+export interface DbMasterProfile {
+  id: string;
+  linkedin_id: string;
+  name: string;
+  headline: string | null;
+  avatar_url: string | null;
+  profile_url: string | null;
+  location: string | null;
+  first_contributed_by: string | null;
+  first_seen_at: string;
+  last_updated_at: string;
+  contributor_count: number;
+  update_count: number;
+  created_at: string;
+}
+
+export interface DbMasterProfileEmployer {
+  id: string;
+  master_profile_id: string;
+  company: string;
+  title: string | null;
+  logo_url: string | null;
+  is_current: boolean;
+  start_date: string | null;
+  end_date: string | null;
+  sort_order: number;
+  last_updated_by: string | null;
+  last_updated_at: string;
+  created_at: string;
+}
+
+export interface DbMasterProfileHistory {
+  id: string;
+  master_profile_id: string;
+  name: string;
+  headline: string | null;
+  avatar_url: string | null;
+  profile_url: string | null;
+  location: string | null;
+  contributed_by: string | null;
+  created_at: string;
+}
+
+export type UserRelationshipType =
+  | 'intro'
+  | 'conference'
+  | 'worked_together'
+  | 'co_investor'
+  | 'portfolio'
+  | 'advisor'
+  | 'cold_outreach'
+  | 'friend'
+  | 'family'
+  | 'other';
+
+export interface DbUserProfileData {
+  id: string;
+  user_id: string;
+  master_profile_id: string;
+  notes: string | null;
+  relationship_type: UserRelationshipType | null;
+  relationship_context: string | null;
+  relationship_strength: number;
+  introduced_by_master_profile_id: string | null;
+  is_new: boolean;
+  first_seen_at: string;
+  last_seen_at: string;
+  current_version: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DbUserProfileDataHistory {
+  id: string;
+  user_id: string;
+  master_profile_id: string;
+  version: number;
+  notes: string | null;
+  relationship_type: string | null;
+  relationship_context: string | null;
+  relationship_strength: number | null;
+  tags_snapshot: string[]; // JSON array of tag names
+  created_at: string;
+}
+
+export interface DbUserProfileTag {
+  user_id: string;
+  master_profile_id: string;
+  tag_id: string;
+  created_at: string;
+}
+
+// Insert types for master profiles
+export interface DbMasterProfileInsert {
+  linkedin_id: string;
+  name: string;
+  headline?: string | null;
+  avatar_url?: string | null;
+  profile_url?: string | null;
+  location?: string | null;
+  first_contributed_by?: string | null;
+}
+
+export interface DbMasterProfileEmployerInsert {
+  master_profile_id: string;
+  company: string;
+  title?: string | null;
+  logo_url?: string | null;
+  is_current?: boolean;
+  start_date?: string | null;
+  end_date?: string | null;
+  sort_order?: number;
+  last_updated_by?: string | null;
+}
+
+export interface DbUserProfileDataInsert {
+  user_id: string;
+  master_profile_id: string;
+  notes?: string | null;
+  relationship_type?: UserRelationshipType | null;
+  relationship_context?: string | null;
+  relationship_strength?: number;
+  introduced_by_master_profile_id?: string | null;
+  is_new?: boolean;
+}
+
+export interface DbUserProfileDataUpdate {
+  notes?: string | null;
+  relationship_type?: UserRelationshipType | null;
+  relationship_context?: string | null;
+  relationship_strength?: number;
+  introduced_by_master_profile_id?: string | null;
+  is_new?: boolean;
+  last_seen_at?: string;
+}
+
 // Tags for organizing contacts
 export interface DbTag {
   id: string;
@@ -215,6 +355,7 @@ export interface ContactWithRelations extends DbContact {
 export interface Database {
   public: {
     Tables: {
+      // Legacy contacts tables (being migrated to master profiles)
       contacts: {
         Row: DbContact;
         Insert: DbContactInsert;
@@ -253,6 +394,38 @@ export interface Database {
       contact_tags: {
         Row: DbContactTag;
         Insert: DbContactTagInsert;
+        Update: never;
+      };
+
+      // Master profiles tables (crowdsourced data architecture)
+      master_profiles: {
+        Row: DbMasterProfile;
+        Insert: DbMasterProfileInsert;
+        Update: Partial<DbMasterProfileInsert>;
+      };
+      master_profile_employers: {
+        Row: DbMasterProfileEmployer;
+        Insert: DbMasterProfileEmployerInsert;
+        Update: Partial<DbMasterProfileEmployerInsert>;
+      };
+      master_profile_history: {
+        Row: DbMasterProfileHistory;
+        Insert: never; // Inserted by trigger only
+        Update: never;
+      };
+      user_profile_data: {
+        Row: DbUserProfileData;
+        Insert: DbUserProfileDataInsert;
+        Update: DbUserProfileDataUpdate;
+      };
+      user_profile_data_history: {
+        Row: DbUserProfileDataHistory;
+        Insert: never; // Inserted by trigger only
+        Update: never;
+      };
+      user_profile_tags: {
+        Row: DbUserProfileTag;
+        Insert: Omit<DbUserProfileTag, 'created_at'>;
         Update: never;
       };
     };

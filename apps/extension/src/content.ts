@@ -15,7 +15,15 @@ interface StoredProfile {
   name: string;
   headline?: string;
   avatarUrl?: string;
+  about?: string;
   employers?: Employer[];
+  education?: Education[];
+  honorsAwards?: string[];
+  courses?: string[];
+  languages?: string[];
+  volunteering?: Volunteering[];
+  certifications?: Certification[];
+  activities?: Activity[];
   skills?: string[];
   archetype?: Archetype;
   couldBe?: string[];
@@ -23,6 +31,34 @@ interface StoredProfile {
   firstSeen: string;
   lastSeen: string;
   note?: string;
+}
+
+interface Education {
+  school: string;
+  degree?: string;
+  field?: string;
+  dates?: string;
+}
+
+interface Volunteering {
+  organization: string;
+  role?: string;
+  cause?: string;
+}
+
+interface Certification {
+  name: string;
+  issuer?: string;
+  issueDate?: string;
+  expirationDate?: string;
+  credentialId?: string;
+  credentialUrl?: string;
+}
+
+interface Activity {
+  type: 'post' | 'comment' | 'reaction';
+  text: string;
+  date?: string;
 }
 
 interface StorageData {
@@ -34,32 +70,101 @@ let currentProfileId: string | null = null;
 let isDragging = false;
 let dragOffset = { x: 0, y: 0 };
 
+// Progress tracking for extraction
+interface ExtractionProgress {
+  step: string;
+  stepLabel: string;
+  progress: number; // 0-1
+  startTime?: number;
+}
+
+const EXTRACTION_STEPS = [
+  { id: 'expanding', label: 'Expanding sections' },
+  { id: 'education', label: 'Extracting education' },
+  { id: 'experience', label: 'Extracting experience' },
+  { id: 'certifications', label: 'Extracting certifications' },
+  { id: 'skills', label: 'Extracting skills' },
+  { id: 'activity', label: 'Analyzing activity' },
+  { id: 'ai', label: 'AI analysis' },
+  { id: 'complete', label: 'Complete' },
+];
+
+function updateProgress(stepId: string, startTime: number): void {
+  if (!panel) return;
+
+  const stepIndex = EXTRACTION_STEPS.findIndex(s => s.id === stepId);
+  const step = EXTRACTION_STEPS[stepIndex];
+  if (!step) return;
+
+  const progress = (stepIndex + 1) / EXTRACTION_STEPS.length;
+  const elapsed = Date.now() - startTime;
+
+  panel.setProgress({
+    step: step.id,
+    label: step.label,
+    progress,
+    elapsed,
+  });
+}
+
+function completeExtraction(profileId: string, durationMs: number): void {
+  // Update panel to show complete
+  if (panel) {
+    panel.setProgress({
+      step: 'complete',
+      label: 'Complete',
+      progress: 1,
+      elapsed: durationMs,
+    });
+
+    // Hide progress bar after 2 seconds
+    setTimeout(() => {
+      panel?.setProgress(null);
+    }, 2000);
+  }
+
+  // Store timing in local storage history
+  chrome.storage.local.get(['extractionHistory'], (result) => {
+    const history = result.extractionHistory || [];
+    history.unshift({
+      profileId,
+      durationMs,
+      timestamp: Date.now(),
+    });
+    // Keep last 100 entries
+    chrome.storage.local.set({ extractionHistory: history.slice(0, 100) });
+  });
+}
+
 /**
- * Initialize the floating panel on LinkedIn profile pages
+ * Initialize the floating panel on all LinkedIn pages
+ * Shows full intelligence on profile pages, minimal orb elsewhere
  */
 function initialize(): void {
   console.log('[Social Recall] Content script loaded on:', window.location.href);
-
-  if (!isLinkedInProfileUrl(window.location.href)) {
-    console.log('[Social Recall] Not a profile page, skipping');
-    return;
-  }
-
-  console.log('[Social Recall] Initializing panel...');
 
   // Inject CSS
   injectStyles();
   console.log('[Social Recall] CSS injected');
 
-  // Create panel
+  // Create panel (always show orb on LinkedIn)
   panel = createPanel(document.body);
   console.log('[Social Recall] Panel created:', panel?.element);
 
   // Setup drag functionality
   setupDragListeners();
 
-  // Extract and display profile intelligence
-  handleProfilePage();
+  // If on profile page, extract and display profile intelligence
+  if (isLinkedInProfileUrl(window.location.href)) {
+    console.log('[Social Recall] On profile page, extracting intelligence...');
+    handleProfilePage();
+  } else {
+    console.log('[Social Recall] Not a profile page, showing minimal orb');
+    // Show minimal state - just the orb with no intelligence
+    if (panel) {
+      panel.setMinimalMode(true);
+    }
+  }
 
   // Listen for URL changes (LinkedIn is a SPA)
   observeUrlChanges();
@@ -150,6 +255,7 @@ async function handleProfilePage(): Promise<void> {
   }
 
   currentProfileId = profileId;
+  const startTime = Date.now();
 
   // Load saved position
   const savedPosition = await loadPosition();
@@ -157,15 +263,21 @@ async function handleProfilePage(): Promise<void> {
     panel.setPosition(savedPosition.x, savedPosition.y);
   }
 
-  // Extract profile data from page
-  const profileData = extractProfileData();
+  // Extract profile data from page (includes background activity fetch)
+  const profileData = await extractProfileData(profileId, startTime);
 
   // Get stored data for this profile
   const storedData = await getStoredProfile(profileId);
 
   // Merge and save (Robocop mode - auto-capture with AI intelligence)
+  updateProgress('ai', startTime);
   const mergedData = await mergeProfileData(profileData, storedData);
   await saveProfile(profileId, mergedData);
+
+  // Mark extraction complete
+  updateProgress('complete', startTime);
+  const durationMs = Date.now() - startTime;
+  completeExtraction(profileId, durationMs);
 
   // Check for job changes
   const jobChange = detectJobChange(profileData, storedData);
@@ -186,21 +298,138 @@ async function handleProfilePage(): Promise<void> {
 }
 
 /**
- * Extract profile data from the current LinkedIn page
+ * Wait for a specified duration
  */
-function extractProfileData(): Partial<StoredProfile> {
-  const name = extractName();
-  const headline = extractHeadline();
-  const avatarUrl = extractAvatarUrl();
+function wait(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Expand all "Show all X" sections on the profile page
+ * This clicks expansion buttons and waits for content to load
+ */
+async function expandAllSections(): Promise<void> {
+  // Find all "Show all" buttons/links on the profile
+  // LinkedIn uses various patterns: "Show all X skills", "Show all X experiences", etc.
+  const showAllButtons = document.querySelectorAll([
+    'a[id*="navigation-index-Show-all"]',
+    'button[aria-label*="Show all"]',
+    '.pv-profile-section__see-more-inline',
+    'a.optional-action-target-wrapper',
+    '[data-control-name="see_all"]',
+  ].join(', '));
+
+  console.log(`[Social Recall] Found ${showAllButtons.length} expandable sections`);
+
+  for (const button of Array.from(showAllButtons)) {
+    const btn = button as HTMLElement;
+    const label = btn.getAttribute('aria-label') || btn.textContent?.trim() || '';
+
+    // Skip activity-related expansions (we handle those separately with filtering)
+    if (label.toLowerCase().includes('activit') || label.toLowerCase().includes('post')) {
+      continue;
+    }
+
+    try {
+      btn.click();
+      // Wait for modal/expansion to load
+      await wait(300);
+      console.log(`[Social Recall] Expanded: ${label}`);
+    } catch (e) {
+      console.log(`[Social Recall] Failed to expand: ${label}`);
+    }
+  }
+
+  // Also expand any "see more" within sections (truncated text)
+  const seeMoreButtons = document.querySelectorAll([
+    '.pv-shared-text-with-see-more button',
+    '.inline-show-more-text__button',
+    'button[aria-expanded="false"]',
+  ].join(', '));
+
+  for (const button of Array.from(seeMoreButtons)) {
+    const btn = button as HTMLElement;
+    if (btn.textContent?.toLowerCase().includes('see more') ||
+        btn.textContent?.toLowerCase().includes('...more')) {
+      try {
+        btn.click();
+        await wait(100);
+      } catch (e) {
+        // Ignore
+      }
+    }
+  }
+
+  // Wait a bit more for any async content to settle
+  await wait(200);
+}
+
+/**
+ * Close any open modals (after extracting from them)
+ */
+function closeModals(): void {
+  const closeButtons = document.querySelectorAll([
+    'button[aria-label="Dismiss"]',
+    'button[data-test-modal-close-btn]',
+    '.artdeco-modal__dismiss',
+  ].join(', '));
+
+  closeButtons.forEach(btn => {
+    try {
+      (btn as HTMLElement).click();
+    } catch (e) {
+      // Ignore
+    }
+  });
+}
+
+/**
+ * Extract profile data from the current LinkedIn page
+ * Expands all sections first, then extracts data
+ */
+async function extractProfileData(profileId: string, startTime: number): Promise<Partial<StoredProfile>> {
+  // Expand all sections first to get full data
+  updateProgress('expanding', startTime);
+  await expandAllSections();
+
+  // Extract education
+  updateProgress('education', startTime);
+  const education = extractEducation();
+
+  // Extract experience
+  updateProgress('experience', startTime);
   const employers = extractEmployers();
 
-  return {
-    name,
-    headline,
-    avatarUrl,
+  // Extract certifications
+  updateProgress('certifications', startTime);
+  const certifications = extractCertifications();
+
+  // Extract other data (skills-related fields)
+  updateProgress('skills', startTime);
+  const immediateData: Partial<StoredProfile> = {
+    name: extractName(),
+    headline: extractHeadline(),
+    avatarUrl: extractAvatarUrl(),
+    about: extractAbout(),
     employers,
+    education,
+    honorsAwards: extractHonorsAwards(),
+    courses: extractCourses(),
+    languages: extractLanguages(),
+    volunteering: extractVolunteering(),
+    certifications,
+    activities: [], // We'll fetch from activity page with filtering
     lastSeen: new Date().toISOString(),
   };
+
+  // Close any modals we opened
+  closeModals();
+
+  // Fetch activities from activity page (only posts/reposts with owner commentary, max 20)
+  updateProgress('activity', startTime);
+  immediateData.activities = await fetchActivitiesFromActivityPage(profileId);
+
+  return immediateData;
 }
 
 function extractName(): string {
@@ -228,8 +457,6 @@ function extractAvatarUrl(): string | undefined {
 
 function extractEmployers(): Employer[] {
   const employers: Employer[] = [];
-
-  // Find experience section
   const experienceSection = document.querySelector('#experience');
   if (!experienceSection) return employers;
 
@@ -237,7 +464,6 @@ function extractEmployers(): Employer[] {
   items.forEach((item) => {
     const companyEl = item.querySelector('.t-14.t-normal span[aria-hidden="true"]');
     const logoImg = item.querySelector('img[width="48"]') as HTMLImageElement;
-
     if (companyEl?.textContent) {
       employers.push({
         company: companyEl.textContent.trim().split(' · ')[0],
@@ -245,8 +471,249 @@ function extractEmployers(): Employer[] {
       });
     }
   });
-
   return employers;
+}
+
+function extractAbout(): string | undefined {
+  // About section has id="about" with content in a div below
+  const aboutSection = document.querySelector('#about');
+  if (!aboutSection) return undefined;
+
+  const container = aboutSection.closest('section');
+  const textEl = container?.querySelector('.pv-shared-text-with-see-more span[aria-hidden="true"]');
+  return textEl?.textContent?.trim();
+}
+
+function extractEducation(): Education[] {
+  const education: Education[] = [];
+  const section = document.querySelector('#education');
+  if (!section) return education;
+
+  const items = section.querySelectorAll('li.artdeco-list__item');
+  items.forEach((item) => {
+    const schoolEl = item.querySelector('.t-bold span[aria-hidden="true"]');
+    const degreeEl = item.querySelector('.t-14.t-normal span[aria-hidden="true"]');
+    const datesEl = item.querySelector('.t-14.t-normal.t-black--light span[aria-hidden="true"]');
+
+    if (schoolEl?.textContent) {
+      const degreeText = degreeEl?.textContent?.trim() || '';
+      const [degree, field] = degreeText.split(',').map(s => s.trim());
+      education.push({
+        school: schoolEl.textContent.trim(),
+        degree,
+        field,
+        dates: datesEl?.textContent?.trim(),
+      });
+    }
+  });
+  return education;
+}
+
+function extractHonorsAwards(): string[] {
+  const awards: string[] = [];
+  const section = document.querySelector('#honors_and_awards');
+  if (!section) return awards;
+
+  const items = section.querySelectorAll('li.artdeco-list__item');
+  items.forEach((item) => {
+    const titleEl = item.querySelector('.t-bold span[aria-hidden="true"]');
+    if (titleEl?.textContent) {
+      awards.push(titleEl.textContent.trim());
+    }
+  });
+  return awards;
+}
+
+function extractCourses(): string[] {
+  const courses: string[] = [];
+  const section = document.querySelector('#courses');
+  if (!section) return courses;
+
+  const items = section.querySelectorAll('li.artdeco-list__item');
+  items.forEach((item) => {
+    const titleEl = item.querySelector('.t-bold span[aria-hidden="true"]');
+    if (titleEl?.textContent) {
+      courses.push(titleEl.textContent.trim());
+    }
+  });
+  return courses;
+}
+
+function extractLanguages(): string[] {
+  const languages: string[] = [];
+  const section = document.querySelector('#languages');
+  if (!section) return languages;
+
+  const items = section.querySelectorAll('li.artdeco-list__item');
+  items.forEach((item) => {
+    const langEl = item.querySelector('.t-bold span[aria-hidden="true"]');
+    if (langEl?.textContent) {
+      languages.push(langEl.textContent.trim());
+    }
+  });
+  return languages;
+}
+
+function extractVolunteering(): Volunteering[] {
+  const volunteering: Volunteering[] = [];
+  const section = document.querySelector('#volunteering_experience');
+  if (!section) return volunteering;
+
+  const items = section.querySelectorAll('li.artdeco-list__item');
+  items.forEach((item) => {
+    const roleEl = item.querySelector('.t-bold span[aria-hidden="true"]');
+    const orgEl = item.querySelector('.t-14.t-normal span[aria-hidden="true"]');
+    const causeEl = item.querySelector('.t-14.t-normal.t-black--light span[aria-hidden="true"]');
+
+    if (roleEl?.textContent || orgEl?.textContent) {
+      volunteering.push({
+        organization: orgEl?.textContent?.trim() || '',
+        role: roleEl?.textContent?.trim(),
+        cause: causeEl?.textContent?.trim(),
+      });
+    }
+  });
+  return volunteering;
+}
+
+function extractCertifications(): Certification[] {
+  const certifications: Certification[] = [];
+  const section = document.querySelector('#licenses_and_certifications');
+  if (!section) return certifications;
+
+  const items = section.querySelectorAll('li.artdeco-list__item');
+  items.forEach((item) => {
+    const nameEl = item.querySelector('.t-bold span[aria-hidden="true"]');
+    const issuerEl = item.querySelector('.t-14.t-normal span[aria-hidden="true"]');
+
+    // Date info is in t-black--light spans, may contain "Issued" and "Expires"
+    const dateEls = item.querySelectorAll('.t-14.t-normal.t-black--light span[aria-hidden="true"]');
+    let issueDate: string | undefined;
+    let expirationDate: string | undefined;
+    let credentialId: string | undefined;
+
+    dateEls.forEach((el) => {
+      const text = el.textContent?.trim() || '';
+      if (text.startsWith('Issued ')) {
+        issueDate = text.replace('Issued ', '');
+      } else if (text.startsWith('Expires ')) {
+        expirationDate = text.replace('Expires ', '');
+      } else if (text.includes('Credential ID')) {
+        credentialId = text.replace('Credential ID ', '').trim();
+      } else if (!issueDate && /^[A-Z][a-z]{2} \d{4}$/.test(text)) {
+        // Fallback: plain date format like "Jan 2023"
+        issueDate = text;
+      }
+    });
+
+    // Credential URL from "Show credential" link
+    const credentialLink = item.querySelector('a[href*="credential"]') as HTMLAnchorElement;
+    const credentialUrl = credentialLink?.href;
+
+    if (nameEl?.textContent) {
+      certifications.push({
+        name: nameEl.textContent.trim(),
+        issuer: issuerEl?.textContent?.trim(),
+        issueDate,
+        expirationDate,
+        credentialId,
+        credentialUrl,
+      });
+    }
+  });
+  return certifications;
+}
+
+/**
+ * Fetch activities from the profile's activity page
+ * Only includes:
+ * - Original posts by the profile owner
+ * - Reposts where the owner added their own commentary
+ * Excludes simple reposts/shares without commentary
+ * Limited to 20 items
+ */
+async function fetchActivitiesFromActivityPage(profileId: string): Promise<Activity[]> {
+  const activities: Activity[] = [];
+  const MAX_ACTIVITIES = 20;
+
+  try {
+    const activityUrl = `https://www.linkedin.com/in/${profileId}/recent-activity/all/`;
+    const response = await fetch(activityUrl, {
+      credentials: 'include', // Include cookies for auth
+    });
+
+    if (!response.ok) {
+      console.log('[Social Recall] Failed to fetch activity page:', response.status);
+      return activities;
+    }
+
+    const html = await response.text();
+
+    // Parse the HTML to extract activities
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+
+    // Find activity items in the parsed document
+    const items = doc.querySelectorAll('.feed-shared-update-v2, .occludable-update');
+
+    for (const item of Array.from(items)) {
+      if (activities.length >= MAX_ACTIVITIES) break;
+
+      // Check if this is a repost
+      const repostIndicator = item.querySelector(
+        '.feed-shared-actor__sub-description, ' +
+        '.update-components-header__text-view, ' +
+        '[data-urn*="reshare"], ' +
+        '.feed-shared-reshared-text'
+      );
+      const isRepost = repostIndicator !== null ||
+        item.innerHTML.includes('reposted') ||
+        item.innerHTML.includes('reshared');
+
+      if (isRepost) {
+        // For reposts, only include if the owner added their own commentary
+        // Owner's commentary appears in .feed-shared-update-v2__commentary or similar
+        const ownerCommentary = item.querySelector(
+          '.feed-shared-update-v2__commentary, ' +
+          '.update-components-text, ' +
+          '.feed-shared-inline-show-more-text'
+        );
+
+        // Get the commentary text (not the original post's text)
+        const commentaryText = ownerCommentary?.textContent?.trim();
+
+        if (commentaryText && commentaryText.length > 10) {
+          activities.push({
+            type: 'post', // Repost with commentary is essentially a post
+            text: commentaryText.slice(0, 500),
+          });
+        }
+        // Skip reposts without commentary
+        continue;
+      }
+
+      // Original post - extract the post text
+      const textEl = item.querySelector(
+        '.feed-shared-text span[dir="ltr"], ' +
+        '.break-words span[aria-hidden="true"], ' +
+        '.update-components-text span[dir="ltr"]'
+      );
+      const text = textEl?.textContent?.trim();
+
+      if (text && text.length > 10) {
+        activities.push({
+          type: 'post',
+          text: text.slice(0, 500),
+        });
+      }
+    }
+
+    console.log(`[Social Recall] Fetched ${activities.length} posts/reposts with commentary (max ${MAX_ACTIVITIES})`);
+  } catch (error) {
+    console.log('[Social Recall] Error fetching activity page:', error);
+  }
+
+  return activities;
 }
 
 /**
@@ -274,6 +741,26 @@ async function saveProfile(profileId: string, data: StoredProfile): Promise<void
   });
 }
 
+// Valid archetypes in the current set (11 core + unknown)
+const VALID_ARCHETYPES = new Set([
+  Archetype.Builder,
+  Archetype.Advisor,
+  Archetype.Creator,
+  Archetype.Executive,
+  Archetype.Connector,
+  Archetype.Operator,
+  Archetype.Seller,
+  Archetype.Researcher,
+  Archetype.Integrator,
+  Archetype.Evangelist,
+  Archetype.Investor,
+  Archetype.Unknown,
+]);
+
+function isValidArchetype(archetype: Archetype | undefined): boolean {
+  return archetype !== undefined && VALID_ARCHETYPES.has(archetype);
+}
+
 /**
  * Merge new profile data with stored data (sync version with local heuristics)
  */
@@ -288,7 +775,15 @@ function mergeProfileDataSync(
       name: newData.name || 'Unknown',
       headline: newData.headline,
       avatarUrl: newData.avatarUrl,
+      about: newData.about,
       employers: newData.employers,
+      education: newData.education,
+      honorsAwards: newData.honorsAwards,
+      courses: newData.courses,
+      languages: newData.languages,
+      volunteering: newData.volunteering,
+      certifications: newData.certifications,
+      activities: newData.activities,
       firstSeen: now,
       lastSeen: now,
       // Default intelligence values from local heuristics
@@ -299,13 +794,31 @@ function mergeProfileDataSync(
     };
   }
 
+  // Recompute intelligence if archetype is invalid (from old version)
+  const needsRecompute = !isValidArchetype(storedData.archetype);
+
   return {
     ...storedData,
     name: newData.name || storedData.name,
     headline: newData.headline || storedData.headline,
     avatarUrl: newData.avatarUrl || storedData.avatarUrl,
+    about: newData.about || storedData.about,
     employers: newData.employers || storedData.employers,
+    education: newData.education || storedData.education,
+    honorsAwards: newData.honorsAwards || storedData.honorsAwards,
+    courses: newData.courses || storedData.courses,
+    languages: newData.languages || storedData.languages,
+    volunteering: newData.volunteering || storedData.volunteering,
+    certifications: newData.certifications || storedData.certifications,
+    activities: newData.activities || storedData.activities,
     lastSeen: now,
+    // Recompute these if archetype was invalid
+    ...(needsRecompute && {
+      archetype: inferArchetype(newData),
+      skills: inferSkills(newData),
+      couldBe: inferCouldBe(newData),
+      goodFor: inferGoodFor(newData),
+    }),
   };
 }
 
@@ -320,6 +833,7 @@ async function getApiUrl(): Promise<string> {
   });
 }
 
+
 /**
  * Merge new profile data with AI intelligence
  */
@@ -329,23 +843,40 @@ async function mergeProfileData(
 ): Promise<StoredProfile> {
   const now = new Date().toISOString();
 
-  // If we already have stored data with AI intelligence, just update timestamps
-  if (storedData && storedData.archetype) {
+  // If we already have stored data with a VALID archetype, just update profile data
+  // Old archetypes from previous versions are invalidated and recomputed
+  if (storedData && isValidArchetype(storedData.archetype)) {
     return {
       ...storedData,
       name: newData.name || storedData.name,
       headline: newData.headline || storedData.headline,
       avatarUrl: newData.avatarUrl || storedData.avatarUrl,
+      about: newData.about || storedData.about,
       employers: newData.employers || storedData.employers,
+      education: newData.education || storedData.education,
+      honorsAwards: newData.honorsAwards || storedData.honorsAwards,
+      courses: newData.courses || storedData.courses,
+      languages: newData.languages || storedData.languages,
+      volunteering: newData.volunteering || storedData.volunteering,
+      certifications: newData.certifications || storedData.certifications,
+      activities: newData.activities || storedData.activities,
       lastSeen: now,
     };
   }
 
-  // For new profiles, try AI inference first
+  // For new profiles, try AI inference first with full profile data
   const aiProfileData: AIProfileData = {
     name: newData.name || 'Unknown',
     headline: newData.headline || '',
+    about: newData.about,
     employers: newData.employers,
+    education: newData.education,
+    honorsAwards: newData.honorsAwards,
+    courses: newData.courses,
+    languages: newData.languages,
+    volunteering: newData.volunteering,
+    certifications: newData.certifications,
+    activities: newData.activities,
   };
 
   try {
@@ -353,27 +884,38 @@ async function mergeProfileData(
     const result = await inferIntelligence(aiProfileData, { apiUrl, timeoutMs: 5000 });
 
     if (result.success && result.archetype) {
-      // AI inference succeeded
+      // AI inference succeeded - map to 11 core archetypes + Unknown
       const archetypeMap: Record<string, Archetype> = {
         builder: Archetype.Builder,
-        architect: Archetype.Architect,
-        designer: Archetype.Designer,
-        scientist: Archetype.Scientist,
-        strategist: Archetype.Strategist,
-        seller: Archetype.Seller,
-        marketer: Archetype.Marketer,
+        advisor: Archetype.Advisor,
+        creator: Archetype.Creator,
+        executive: Archetype.Executive,
         connector: Archetype.Connector,
-        specialist: Archetype.Specialist,
+        operator: Archetype.Operator,
+        seller: Archetype.Seller,
+        researcher: Archetype.Researcher,
+        integrator: Archetype.Integrator,
+        evangelist: Archetype.Evangelist,
+        investor: Archetype.Investor,
+        unknown: Archetype.Unknown,
       };
 
       return {
         name: newData.name || 'Unknown',
         headline: newData.headline,
         avatarUrl: newData.avatarUrl,
+        about: newData.about,
         employers: newData.employers,
+        education: newData.education,
+        honorsAwards: newData.honorsAwards,
+        courses: newData.courses,
+        languages: newData.languages,
+        volunteering: newData.volunteering,
+        certifications: newData.certifications,
+        activities: newData.activities,
         firstSeen: storedData?.firstSeen || now,
         lastSeen: now,
-        archetype: archetypeMap[result.archetype] || Archetype.Specialist,
+        archetype: archetypeMap[result.archetype] || Archetype.Unknown,
         skills: result.skills?.map(s => s.name) || inferSkills(newData),
         couldBe: result.couldBe || inferCouldBe(newData),
         goodFor: result.goodFor || inferGoodFor(newData),
@@ -410,101 +952,35 @@ function detectJobChange(
 }
 
 /**
- * Infer archetype from profile data (placeholder - would use AI in production)
+ * Fallback archetype when AI inference unavailable
  */
-function inferArchetype(data: Partial<StoredProfile>): Archetype {
-  const headline = (data.headline || '').toLowerCase();
-
-  if (headline.includes('engineer') || headline.includes('developer')) {
-    return Archetype.Builder;
-  }
-  if (headline.includes('architect')) {
-    return Archetype.Architect;
-  }
-  if (headline.includes('design')) {
-    return Archetype.Designer;
-  }
-  if (headline.includes('data') || headline.includes('scientist') || headline.includes('ml')) {
-    return Archetype.Scientist;
-  }
-  if (headline.includes('ceo') || headline.includes('founder') || headline.includes('strategy')) {
-    return Archetype.Strategist;
-  }
-  if (headline.includes('sales') || headline.includes('account')) {
-    return Archetype.Seller;
-  }
-  if (headline.includes('marketing') || headline.includes('growth')) {
-    return Archetype.Marketer;
-  }
-  if (headline.includes('partner') || headline.includes('community') || headline.includes('bd')) {
-    return Archetype.Connector;
-  }
-
-  return Archetype.Specialist;
+function inferArchetype(_data: Partial<StoredProfile>): Archetype {
+  // AI handles real archetype inference - this is just a placeholder fallback
+  return Archetype.Unknown;
 }
 
 /**
- * Infer skills from profile data (placeholder - would use AI in production)
+ * Fallback skills when AI inference unavailable
  */
-function inferSkills(data: Partial<StoredProfile>): string[] {
-  const headline = data.headline || '';
-  const skills: string[] = [];
-
-  // Very basic skill extraction from headline
-  const keywords = ['React', 'Python', 'JavaScript', 'TypeScript', 'Go', 'Rust', 'Java',
-    'Machine Learning', 'AI', 'Product', 'Design', 'Strategy', 'Leadership',
-    'Sales', 'Marketing', 'Growth', 'Data', 'Cloud', 'AWS', 'Infrastructure'];
-
-  keywords.forEach(skill => {
-    if (headline.toLowerCase().includes(skill.toLowerCase())) {
-      skills.push(skill);
-    }
-  });
-
-  return skills.length > 0 ? skills.slice(0, 4) : ['Professional'];
+function inferSkills(_data: Partial<StoredProfile>): string[] {
+  // AI handles real skill extraction - this is just a placeholder fallback
+  return [];
 }
 
 /**
- * Infer relationship types (placeholder - would use AI in production)
+ * Fallback relationship types when AI inference unavailable
  */
-function inferCouldBe(data: Partial<StoredProfile>): string[] {
-  const archetype = inferArchetype(data);
-
-  switch (archetype) {
-    case Archetype.Builder:
-    case Archetype.Architect:
-      return ['Co-founder', 'Tech Advisor', 'Contractor'];
-    case Archetype.Designer:
-      return ['Co-founder', 'Design Lead', 'Consultant'];
-    case Archetype.Strategist:
-      return ['Co-founder', 'Advisor', 'Board Member'];
-    case Archetype.Seller:
-      return ['Sales Lead', 'BD Partner', 'Advisor'];
-    case Archetype.Connector:
-      return ['Advisor', 'Investor Intro', 'Partner'];
-    default:
-      return ['Advisor', 'Consultant', 'Collaborator'];
-  }
+function inferCouldBe(_data: Partial<StoredProfile>): string[] {
+  // AI handles real relationship inference - this is just a placeholder fallback
+  return [];
 }
 
 /**
- * Infer project fit (placeholder - would use AI in production)
+ * Fallback project fit when AI inference unavailable
  */
-function inferGoodFor(data: Partial<StoredProfile>): string[] {
-  const employers = data.employers || [];
-  const industries: string[] = [];
-
-  employers.forEach(emp => {
-    const company = emp.company.toLowerCase();
-    if (company.includes('stripe') || company.includes('square') || company.includes('paypal')) {
-      industries.push('Fintech');
-    }
-    if (company.includes('google') || company.includes('meta') || company.includes('amazon')) {
-      industries.push('Big Tech');
-    }
-  });
-
-  return industries.length > 0 ? industries : ['Startups', 'Tech'];
+function inferGoodFor(_data: Partial<StoredProfile>): string[] {
+  // AI handles real industry/project inference - this is just a placeholder fallback
+  return [];
 }
 
 /**
@@ -517,10 +993,11 @@ function buildIntelligence(
   return {
     name: data.name,
     avatarUrl: data.avatarUrl,
-    archetype: data.archetype || Archetype.Specialist,
-    skills: data.skills || ['Professional'],
-    couldBe: data.couldBe || ['Collaborator'],
-    goodFor: data.goodFor || ['Projects'],
+    archetype: data.archetype || Archetype.Unknown,
+    // Use defaults if arrays are empty or missing
+    skills: data.skills?.length ? data.skills : ['Professional'],
+    couldBe: data.couldBe?.length ? data.couldBe : ['Collaborator'],
+    goodFor: data.goodFor?.length ? data.goodFor : ['Projects'],
     firstSeen: data.firstSeen ? new Date(data.firstSeen) : undefined,
     jobChange,
   };
@@ -538,8 +1015,19 @@ function observeUrlChanges(): void {
       currentProfileId = null;
 
       if (isLinkedInProfileUrl(lastUrl)) {
+        console.log('[Social Recall] Navigated to profile page');
+        // Switch to full mode and extract intelligence
+        if (panel) {
+          panel.setMinimalMode(false);
+        }
         // Small delay to let page content load
         setTimeout(() => handleProfilePage(), 500);
+      } else {
+        console.log('[Social Recall] Navigated away from profile page');
+        // Switch to minimal mode
+        if (panel) {
+          panel.setMinimalMode(true);
+        }
       }
     }
   });

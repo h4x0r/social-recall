@@ -16,17 +16,20 @@ const SKILL_CATEGORIES = [
   'Investing',
 ];
 
-// Archetypes from the floating panel design
+// 11 Core Archetypes + Unknown (matching Tarot cards in extension)
 const ARCHETYPES = [
-  'builder',
-  'architect',
-  'designer',
-  'scientist',
-  'strategist',
-  'seller',
-  'marketer',
-  'connector',
-  'specialist',
+  'builder',     // The Magician - Technical founders, engineers
+  'advisor',     // The High Priestess - Board members, coaches
+  'creator',     // The Empress - Designers, brand builders
+  'executive',   // The Emperor - CEOs, managing directors
+  'connector',   // The Lovers - Network weavers, intro makers
+  'operator',    // The Chariot - COOs, Chiefs of Staff
+  'seller',      // Strength - Sales, BD, revenue generators
+  'researcher',  // The Hermit - Scientists, analysts, experts
+  'integrator',  // Temperance - Product managers, generalists
+  'evangelist',  // The Star - Developer advocates, thought leaders
+  'investor',    // Judgement - Angels, VCs, LPs
+  'unknown',     // ? - Doesn't fit core archetypes
 ] as const;
 
 type Archetype = (typeof ARCHETYPES)[number];
@@ -36,10 +39,43 @@ interface Employer {
   logo: string;
 }
 
+interface Education {
+  school: string;
+  degree?: string;
+  field?: string;
+  dates?: string;
+}
+
+interface Volunteering {
+  organization: string;
+  role?: string;
+  cause?: string;
+}
+
+interface Certification {
+  name: string;
+  issuer?: string;
+  issueDate?: string;
+}
+
+interface Activity {
+  type: 'post' | 'comment' | 'reaction';
+  text: string;
+  date?: string;
+}
+
 interface ProfileData {
   name: string;
   headline: string;
+  about?: string;
   employers?: Employer[];
+  education?: Education[];
+  honorsAwards?: string[];
+  courses?: string[];
+  languages?: string[];
+  volunteering?: Volunteering[];
+  certifications?: Certification[];
+  activities?: Activity[];
   notes?: string;
 }
 
@@ -64,9 +100,47 @@ function buildPrompt(profile: ProfileData): string {
   parts.push(`Name: ${profile.name}`);
   parts.push(`Headline: ${profile.headline}`);
 
+  if (profile.about) {
+    parts.push(`About: ${profile.about.slice(0, 500)}`);
+  }
+
   if (profile.employers && profile.employers.length > 0) {
     const companies = profile.employers.map((e) => e.company).join(', ');
     parts.push(`Companies: ${companies}`);
+  }
+
+  if (profile.education && profile.education.length > 0) {
+    const schools = profile.education.map((e) =>
+      `${e.school}${e.degree ? ` (${e.degree})` : ''}`
+    ).join(', ');
+    parts.push(`Education: ${schools}`);
+  }
+
+  if (profile.certifications && profile.certifications.length > 0) {
+    const certs = profile.certifications.map((c) => c.name).join(', ');
+    parts.push(`Certifications: ${certs}`);
+  }
+
+  if (profile.volunteering && profile.volunteering.length > 0) {
+    const vol = profile.volunteering.map((v) =>
+      `${v.role || 'Volunteer'} at ${v.organization}`
+    ).join(', ');
+    parts.push(`Volunteering: ${vol}`);
+  }
+
+  if (profile.languages && profile.languages.length > 0) {
+    parts.push(`Languages: ${profile.languages.join(', ')}`);
+  }
+
+  if (profile.activities && profile.activities.length > 0) {
+    const recentPosts = profile.activities
+      .filter(a => a.type === 'post')
+      .slice(0, 5)
+      .map(a => a.text.slice(0, 200))
+      .join(' | ');
+    if (recentPosts) {
+      parts.push(`Recent posts: ${recentPosts}`);
+    }
   }
 
   if (profile.notes) {
@@ -87,16 +161,19 @@ function buildPrompt(profile: ProfileData): string {
   parts.push('SKILL CATEGORIES (choose from):');
   parts.push(SKILL_CATEGORIES.join(', '));
   parts.push('');
-  parts.push('ARCHETYPES (choose exactly one):');
-  parts.push('- builder: Ships production systems, engineering focus');
-  parts.push('- architect: Designs systems, advises on structure');
-  parts.push('- designer: UX/UI, experience design');
-  parts.push('- scientist: ML, research, data science');
-  parts.push('- strategist: Leadership, fundraising, strategy');
-  parts.push('- seller: Sales, BD, deals');
-  parts.push('- marketer: Growth, brand, content');
-  parts.push('- connector: Partnerships, community, networking');
-  parts.push('- specialist: Deep domain expert');
+  parts.push('ARCHETYPES (choose exactly one based on their primary professional identity):');
+  parts.push('- builder: Technical founders, engineers who ship production systems');
+  parts.push('- advisor: Board members, executive coaches, seasoned advisors');
+  parts.push('- creator: Designers, brand builders, product visionaries');
+  parts.push('- executive: CEOs, presidents, managing directors who lead');
+  parts.push('- connector: Network weavers who make valuable introductions');
+  parts.push('- operator: COOs, Chiefs of Staff, program managers who execute');
+  parts.push('- seller: Sales, BD, revenue generators who close deals');
+  parts.push('- researcher: Scientists, analysts, domain experts who investigate');
+  parts.push('- integrator: Product managers, generalists, bridge-builders');
+  parts.push('- evangelist: Developer advocates, thought leaders, community builders');
+  parts.push('- investor: Angels, VCs, LPs who fund ventures');
+  parts.push('- unknown: Doesn\'t clearly fit the above archetypes');
   parts.push('');
   parts.push('COULD BE (relationship potential - choose 1-3):');
   parts.push('Co-founder, Tech Advisor, Board Member, Mentor, Contractor, Design Lead, Sales Lead, Investor, Partner');
