@@ -454,7 +454,7 @@ function closeModals(): void {
 /**
  * Wait for LinkedIn content to load (shimmer placeholders to disappear)
  */
-async function waitForContentLoad(maxWaitMs: number = 15000): Promise<boolean> {
+async function waitForContentLoad(maxWaitMs: number = 20000): Promise<boolean> {
   const startTime = Date.now();
   const checkInterval = 300;
   let scrollTriggered = false;
@@ -495,12 +495,17 @@ async function waitForContentLoad(maxWaitMs: number = 15000): Promise<boolean> {
     // Check for company logos inside sections
     const experienceLogos = document.querySelectorAll('section img[src*="company-logo"], section img[src*="shrink_100"]');
 
-    console.log(`[Social Recall] Content check: sections=${sections.length}, withContent=${sectionsWithContent}, h2s=${h2WithText} (${h2Texts.join(', ')}), hasExp=${hasExperienceText}, name=${hasProfileName}, logos=${experienceLogos.length}`);
+    // Check for loader sections (skeleton/shimmer state)
+    const loaderSections = document.querySelectorAll('section[class*="pvs-loader"]');
+    const hasLoaders = loaderSections.length > 0;
+
+    console.log(`[Social Recall] Content check: sections=${sections.length}, withContent=${sectionsWithContent}, h2s=${h2WithText} (${h2Texts.join(', ')}), hasExp=${hasExperienceText}, name=${hasProfileName}, logos=${experienceLogos.length}, loaders=${loaderSections.length}`);
 
     // Content is ready when we have:
     // 1. Profile name loaded
-    // 2. Multiple h2s with text OR sections with content OR Experience+Education text visible
-    const contentReady = hasProfileName && (
+    // 2. NO loader sections (content fully loaded)
+    // 3. Multiple h2s with text OR sections with content OR Experience+Education text visible
+    const contentReady = hasProfileName && !hasLoaders && (
       h2WithText >= 5 ||  // At least 5 h2s with text
       sectionsWithContent >= 3 ||  // At least 3 sections with content
       (hasExperienceText && experienceLogos.length > 0)  // Experience text and logos
@@ -522,6 +527,13 @@ async function waitForContentLoad(maxWaitMs: number = 15000): Promise<boolean> {
     }
 
     await wait(checkInterval);
+  }
+
+  // Check if we're still in loader state - if so, wait more
+  const loaderSections = document.querySelectorAll('section[class*="pvs-loader"]');
+  if (loaderSections.length > 0) {
+    console.log(`[Social Recall] Still ${loaderSections.length} loader sections, waiting 5 more seconds...`);
+    await wait(5000);
   }
 
   console.log('[Social Recall] Content load timeout - proceeding anyway');
