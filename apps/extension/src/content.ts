@@ -388,19 +388,19 @@ function wait(ms: number): Promise<void> {
  */
 async function expandAllSections(): Promise<void> {
   // Find "Show all" buttons/links - be VERY specific to avoid clicking wrong things
+  // NOTE: Removed "skill" as it navigates to a separate page instead of expanding inline
   const showAllButtons = document.querySelectorAll([
     'a[id*="navigation-index-Show-all"]',
     'button[aria-label*="Show all"][aria-label*="experience"]',
     'button[aria-label*="Show all"][aria-label*="education"]',
-    'button[aria-label*="Show all"][aria-label*="skill"]',
     'button[aria-label*="Show all"][aria-label*="certification"]',
     'button[aria-label*="Show all"][aria-label*="license"]',
   ].join(', '));
 
   console.log(`[Social Recall] Found ${showAllButtons.length} expandable sections`);
 
-  // Words that indicate we should NOT click this element
-  const skipPatterns = /activit|post|message|connect|follow|more action|pending|withdraw/i;
+  // Words that indicate we should NOT click this element (navigates away or unwanted action)
+  const skipPatterns = /activit|post|message|connect|follow|more action|pending|withdraw|skill/i;
 
   for (const button of Array.from(showAllButtons)) {
     const btn = button as HTMLElement;
