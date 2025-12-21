@@ -319,8 +319,9 @@ async function handleProfilePage(): Promise<void> {
   }
 
   // Give LinkedIn SPA time to initialize before we start checking
+  // LinkedIn needs time to hydrate the page and start loading sections
   console.log('[Social Recall] Waiting for LinkedIn SPA to initialize...');
-  await wait(1500);
+  await wait(3000);
 
   // Re-check context validity after wait
   if (!isExtensionContextValid()) {
