@@ -630,49 +630,58 @@ function debugLinkedInDOM(): void {
   const mainContent = document.querySelector('main');
   console.log(`[Social Recall] Main element: ${mainContent ? 'found' : 'NOT FOUND'}, children: ${mainContent?.children.length || 0}`);
 
-  // Find all sections with artdeco-card class
-  const sections = document.querySelectorAll('section.artdeco-card, section.pv-profile-card, section[class*="artdeco-card"]');
-  console.log(`[Social Recall] Profile sections found: ${sections.length}`);
+  // Show main's structure
+  if (mainContent) {
+    const firstChild = mainContent.firstElementChild;
+    console.log(`[Social Recall] Main first child: ${firstChild?.tagName}.${firstChild?.className.slice(0, 50)}`);
+  }
 
-  sections.forEach((sec, i) => {
-    const classes = sec.className.slice(0, 60);
-    const childCount = sec.children.length;
-    const textLen = sec.textContent?.trim().length || 0;
-    const firstText = sec.textContent?.slice(0, 100).replace(/\s+/g, ' ').trim();
-    console.log(`[Social Recall] section[${i}]: children=${childCount}, textLen=${textLen}, classes="${classes}"`);
-    if (textLen > 0 && textLen < 200) {
-      console.log(`[Social Recall] section[${i}] text: "${firstText}"`);
+  // Find ALL sections (any class)
+  const allSections = document.querySelectorAll('section');
+  console.log(`[Social Recall] All sections: ${allSections.length}`);
+  allSections.forEach((sec, i) => {
+    if (i < 5) { // First 5 only
+      const classes = sec.className.slice(0, 80);
+      console.log(`[Social Recall] section[${i}]: "${classes}"`);
     }
   });
 
-  // Check for pvs-header__title elements directly
-  const pvsHeaders = document.querySelectorAll('.pvs-header__title');
-  console.log(`[Social Recall] pvs-header__title elements: ${pvsHeaders.length}`);
-  pvsHeaders.forEach((h, i) => {
-    console.log(`[Social Recall] header[${i}]: "${h.textContent?.trim().slice(0, 30)}"`);
-  });
-
-  // Check for any h2 elements
+  // Check for any h2 elements and their content
   const h2s = document.querySelectorAll('h2');
   console.log(`[Social Recall] h2 elements: ${h2s.length}`);
+  h2s.forEach((h2, i) => {
+    const text = h2.textContent?.trim().slice(0, 40);
+    if (text && text.length > 2 && i < 10) {
+      const parent = h2.parentElement;
+      const section = h2.closest('section');
+      console.log(`[Social Recall] h2[${i}]: "${text}" parent=${parent?.tagName}.${parent?.className.slice(0, 30)} section=${section?.className.slice(0, 30) || 'none'}`);
+    }
+  });
 
-  // Find where "Experience" text actually lives
-  const allSpans = document.querySelectorAll('span');
+  // Look for common LinkedIn patterns
+  const pvsElements = document.querySelectorAll('[class*="pvs-"]');
+  console.log(`[Social Recall] Elements with pvs- class: ${pvsElements.length}`);
+
+  const pvElements = document.querySelectorAll('[class*="pv-"]');
+  console.log(`[Social Recall] Elements with pv- class: ${pvElements.length}`);
+
+  // Find where "Experience" text lives (in any element, not just span)
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   let expFound = false;
-  for (const span of allSpans) {
-    if (span.textContent?.trim() === 'Experience') {
+  while (walker.nextNode()) {
+    if (walker.currentNode.textContent?.trim() === 'Experience') {
       expFound = true;
-      const parent = span.parentElement;
+      const parent = walker.currentNode.parentElement;
       const grandparent = parent?.parentElement;
-      console.log(`[Social Recall] "Experience" span parent: ${parent?.tagName}.${parent?.className.slice(0, 40)}`);
-      console.log(`[Social Recall] "Experience" span grandparent: ${grandparent?.tagName}.${grandparent?.className.slice(0, 40)}`);
-      const section = span.closest('section');
-      console.log(`[Social Recall] "Experience" closest section: ${section?.className.slice(0, 50)}`);
+      const section = parent?.closest('section');
+      console.log(`[Social Recall] "Experience" text in: ${parent?.tagName}.${parent?.className.slice(0, 40)}`);
+      console.log(`[Social Recall] "Experience" grandparent: ${grandparent?.tagName}.${grandparent?.className.slice(0, 40)}`);
+      console.log(`[Social Recall] "Experience" section: ${section?.tagName}.${section?.className.slice(0, 50) || 'none'}`);
       break;
     }
   }
   if (!expFound) {
-    console.log('[Social Recall] "Experience" span NOT FOUND in any span');
+    console.log('[Social Recall] "Experience" text NOT FOUND anywhere in body');
   }
 
   console.log('[Social Recall] ===== END DOM INSPECTION =====');
