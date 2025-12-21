@@ -468,7 +468,8 @@ async function waitForContentLoad(maxWaitMs: number = 20000): Promise<boolean> {
 
   while (Date.now() - startTime < maxWaitMs) {
     // Check for profile sections with actual content
-    const sections = document.querySelectorAll('section.artdeco-card, section[class*="artdeco-card"]');
+    // Use multiple selectors to find sections
+    const sections = document.querySelectorAll('section[data-view-name="profile-card"], section.artdeco-card, section[class*="artdeco-card"]');
     let sectionsWithContent = 0;
 
     for (const sec of sections) {
@@ -478,6 +479,10 @@ async function waitForContentLoad(maxWaitMs: number = 20000): Promise<boolean> {
         sectionsWithContent++;
       }
     }
+
+    // Also check for pvs-list containers (key indicator of loaded content)
+    const pvsLists = document.querySelectorAll('.pvs-list__container, [class*="pvs-list"]');
+    const hasPvsLists = pvsLists.length > 0;
 
     // Check for h2 elements with actual text (key indicator content loaded)
     const h2s = document.querySelectorAll('h2');
@@ -506,13 +511,14 @@ async function waitForContentLoad(maxWaitMs: number = 20000): Promise<boolean> {
     const loaderSections = document.querySelectorAll('section[class*="pvs-loader"]');
     const hasLoaders = loaderSections.length > 0;
 
-    console.log(`[Social Recall] Content check: sections=${sections.length}, withContent=${sectionsWithContent}, h2s=${h2WithText} (${h2Texts.join(', ')}), hasExp=${hasExperienceText}, name=${hasProfileName}, logos=${experienceLogos.length}, loaders=${loaderSections.length}`);
+    console.log(`[Social Recall] Content check: sections=${sections.length}, withContent=${sectionsWithContent}, pvsLists=${pvsLists.length}, h2s=${h2WithText} (${h2Texts.join(', ')}), hasExp=${hasExperienceText}, name=${hasProfileName}, logos=${experienceLogos.length}, loaders=${loaderSections.length}`);
 
     // Content is ready when we have:
     // 1. Profile name loaded
     // 2. NO loader sections (content fully loaded)
-    // 3. Multiple h2s with text OR sections with content OR Experience+Education text visible
+    // 3. pvs-list containers OR multiple sections with content OR Experience text
     const contentReady = hasProfileName && !hasLoaders && (
+      hasPvsLists ||  // pvs-list containers present (key indicator)
       h2WithText >= 5 ||  // At least 5 h2s with text
       sectionsWithContent >= 3 ||  // At least 3 sections with content
       (hasExperienceText && experienceLogos.length > 0)  // Experience text and logos
@@ -710,6 +716,18 @@ function debugLinkedInDOM(): void {
   const pvElements = document.querySelectorAll('[class*="pv-"]');
   console.log(`[Social Recall] Elements with pv- class: ${pvElements.length}`);
 
+  // Check for profile-card sections (new LinkedIn structure)
+  const profileCards = document.querySelectorAll('section[data-view-name="profile-card"]');
+  console.log(`[Social Recall] profile-card sections: ${profileCards.length}`);
+  profileCards.forEach((card, i) => {
+    const firstSpan = card.querySelector('span[aria-hidden="true"]');
+    console.log(`[Social Recall] profile-card[${i}]: "${firstSpan?.textContent?.trim().slice(0, 30) || 'no text'}"`);
+  });
+
+  // Check for pvs-list containers
+  const pvsLists = document.querySelectorAll('.pvs-list__container, [class*="pvs-list"]');
+  console.log(`[Social Recall] pvs-list containers: ${pvsLists.length}`);
+
   // Find where "Experience" text lives (in any element, not just span)
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   let expFound = false;
@@ -735,39 +753,49 @@ function debugLinkedInDOM(): void {
 function findSectionByHeader(headerText: string): Element | null {
   const searchText = headerText.toLowerCase();
 
-  // Strategy 1: Find via pvs-header__title (LinkedIn's current structure)
-  const pvsHeaders = document.querySelectorAll('.pvs-header__title, h2.pvs-header__title');
-  for (const header of pvsHeaders) {
-    const text = header.textContent?.trim().toLowerCase();
-    if (text === searchText || text?.startsWith(searchText)) {
-      const section = header.closest('section.artdeco-card, section.pv-profile-card, section[class*="artdeco-card"]');
-      if (section) {
-        console.log(`[Social Recall] Found "${headerText}" via pvs-header__title`);
-        return section;
-      }
-    }
-  }
-
-  // Strategy 2: Find any h2 with the text and get its section
-  const h2s = document.querySelectorAll('h2');
-  for (const h2 of h2s) {
-    const text = h2.textContent?.trim().toLowerCase();
-    if (text === searchText || text?.startsWith(searchText)) {
-      const section = h2.closest('section');
-      if (section) {
-        console.log(`[Social Recall] Found "${headerText}" via h2`);
-        return section;
-      }
-    }
-  }
-
-  // Strategy 3: Find pv-profile-card sections with matching text
-  const profileCards = document.querySelectorAll('section.pv-profile-card, section[class*="artdeco-card"]');
+  // Strategy 1: Find section with data-view-name="profile-card" that contains matching text
+  const profileCards = document.querySelectorAll('section[data-view-name="profile-card"]');
   for (const card of profileCards) {
-    const headerEl = card.querySelector('h2, .pvs-header__title');
-    if (headerEl?.textContent?.trim().toLowerCase().includes(searchText)) {
-      console.log(`[Social Recall] Found "${headerText}" via pv-profile-card`);
-      return card;
+    // Check first few spans for header text
+    const spans = card.querySelectorAll('span[aria-hidden="true"]');
+    for (let i = 0; i < Math.min(5, spans.length); i++) {
+      const text = spans[i].textContent?.trim().toLowerCase();
+      if (text === searchText || text?.startsWith(searchText)) {
+        console.log(`[Social Recall] Found "${headerText}" via profile-card data-view-name`);
+        return card;
+      }
+    }
+  }
+
+  // Strategy 2: Find any section containing an h2/div with the header text
+  const allSections = document.querySelectorAll('section');
+  for (const section of allSections) {
+    // Check h2 elements
+    const h2 = section.querySelector('h2');
+    if (h2?.textContent?.trim().toLowerCase().includes(searchText)) {
+      console.log(`[Social Recall] Found "${headerText}" via section h2`);
+      return section;
+    }
+    // Check first few text elements
+    const firstSpans = section.querySelectorAll(':scope > div span[aria-hidden="true"]');
+    for (let i = 0; i < Math.min(3, firstSpans.length); i++) {
+      if (firstSpans[i].textContent?.trim().toLowerCase() === searchText) {
+        console.log(`[Social Recall] Found "${headerText}" via section span`);
+        return section;
+      }
+    }
+  }
+
+  // Strategy 3: Find div with pvs-list that's preceded by the header text
+  const allSpans = document.querySelectorAll('span[aria-hidden="true"]');
+  for (const span of allSpans) {
+    if (span.textContent?.trim().toLowerCase() === searchText) {
+      // Found the header text, now find its containing section
+      const section = span.closest('section');
+      if (section) {
+        console.log(`[Social Recall] Found "${headerText}" via span search`);
+        return section;
+      }
     }
   }
 
