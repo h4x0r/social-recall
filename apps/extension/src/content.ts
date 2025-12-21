@@ -284,10 +284,13 @@ async function handleProfilePage(): Promise<void> {
 
   // Build intelligence object
   const intelligence = buildIntelligence(mergedData, jobChange);
+  console.log('[Social Recall] Intelligence built:', JSON.stringify(intelligence, null, 2));
 
   // Update panel
   if (panel) {
+    console.log('[Social Recall] Setting intelligence on panel...');
     panel.setIntelligence(intelligence);
+    console.log('[Social Recall] Intelligence set complete');
 
     // Add alert class if job change detected
     const orb = panel.element.querySelector('.sr-panel__orb');
@@ -392,6 +395,12 @@ async function extractProfileData(profileId: string, startTime: number): Promise
   updateProgress('expanding', startTime);
   await expandAllSections();
 
+  // Debug: Log all section IDs found on page
+  const sectionIds = Array.from(document.querySelectorAll('[id]'))
+    .map(el => el.id)
+    .filter(id => id && !id.startsWith('ember'));
+  console.log('[Social Recall] Available section IDs:', sectionIds.slice(0, 30));
+
   // Extract education
   updateProgress('education', startTime);
   const education = extractEducation();
@@ -432,17 +441,38 @@ async function extractProfileData(profileId: string, startTime: number): Promise
   return immediateData;
 }
 
+function stripNotificationBadge(name: string): string {
+  // Remove notification badge like "(1) " or "(99+) " from start of name
+  return name.replace(/^\(\d+\+?\)\s*/, '').trim();
+}
+
 function extractName(): string {
-  // Try various selectors LinkedIn uses
-  const nameEl = document.querySelector('h1.text-heading-xlarge');
-  if (nameEl?.textContent) {
-    return nameEl.textContent.trim();
+  // Try various selectors LinkedIn uses for the profile name
+  const selectors = [
+    'h1.text-heading-xlarge',
+    'h1.inline.t-24.v-align-middle.break-words',
+    '.pv-top-card--list li:first-child',
+    '.text-heading-xlarge',
+    'h1[data-generated-suggestion-target]',
+    // Profile card name
+    '.pv-text-details__left-panel h1',
+    '.ph5 h1',
+  ];
+
+  for (const selector of selectors) {
+    const el = document.querySelector(selector);
+    if (el?.textContent?.trim()) {
+      const name = el.textContent.trim();
+      console.log('[Social Recall] Found name with selector:', selector, '→', name);
+      return stripNotificationBadge(name);
+    }
   }
 
   // Fallback to page title
+  console.log('[Social Recall] Name not found in DOM, using page title fallback');
   const title = document.title;
   const parts = title.split(/\s[|–-]\s/);
-  return parts[0]?.trim() || 'Unknown';
+  return stripNotificationBadge(parts[0]?.trim() || 'Unknown');
 }
 
 function extractHeadline(): string | undefined {
@@ -458,6 +488,13 @@ function extractAvatarUrl(): string | undefined {
 function extractEmployers(): Employer[] {
   const employers: Employer[] = [];
   const experienceSection = document.querySelector('#experience');
+  console.log('[Social Recall] Experience section found:', !!experienceSection);
+  if (!experienceSection) {
+    // Try alternative selectors
+    const altSection = document.querySelector('[data-section="experience"]') ||
+      document.querySelector('section:has(#experience-section)');
+    console.log('[Social Recall] Alternative experience section:', !!altSection);
+  }
   if (!experienceSection) return employers;
 
   const items = experienceSection.querySelectorAll('li.artdeco-list__item');
@@ -825,10 +862,12 @@ function mergeProfileDataSync(
 /**
  * Get the web app URL from storage or use default
  */
+const DEFAULT_WEB_APP_URL = 'https://social-recall.vercel.app';
+
 async function getApiUrl(): Promise<string> {
   return new Promise((resolve) => {
     chrome.storage.sync.get(['webAppUrl'], (result) => {
-      resolve(result.webAppUrl || 'http://localhost:3000');
+      resolve(result.webAppUrl || DEFAULT_WEB_APP_URL);
     });
   });
 }
@@ -842,10 +881,17 @@ async function mergeProfileData(
   storedData: StoredProfile | null
 ): Promise<StoredProfile> {
   const now = new Date().toISOString();
+  console.log('[Social Recall] mergeProfileData called, storedData:', storedData ? 'exists' : 'null');
 
-  // If we already have stored data with a VALID archetype, just update profile data
+  // If we already have stored data with a VALID archetype AND real intelligence data, just update profile data
   // Old archetypes from previous versions are invalidated and recomputed
-  if (storedData && isValidArchetype(storedData.archetype)) {
+  // Also re-run AI if archetype is "unknown" with no real skills (likely a previous failure)
+  const hasRealIntelligence = storedData?.skills?.length &&
+    storedData.skills[0] !== 'Professional' &&
+    storedData.archetype !== Archetype.Unknown;
+
+  if (storedData && isValidArchetype(storedData.archetype) && hasRealIntelligence) {
+    console.log('[Social Recall] Using stored data with valid archetype:', storedData.archetype);
     return {
       ...storedData,
       name: newData.name || storedData.name,
@@ -864,6 +910,9 @@ async function mergeProfileData(
     };
   }
 
+  // Need to run AI - either new profile, invalid archetype, or missing real intelligence
+  console.log('[Social Recall] Running AI inference (stored archetype:', storedData?.archetype, 'hasRealIntelligence:', hasRealIntelligence, ')');
+
   // For new profiles, try AI inference first with full profile data
   const aiProfileData: AIProfileData = {
     name: newData.name || 'Unknown',
@@ -881,7 +930,13 @@ async function mergeProfileData(
 
   try {
     const apiUrl = await getApiUrl();
+    console.log('[Social Recall] Calling AI inference at:', apiUrl);
+    console.log('[Social Recall] Profile data being sent:', JSON.stringify(aiProfileData, null, 2));
     const result = await inferIntelligence(aiProfileData, { apiUrl, timeoutMs: 5000 });
+    console.log('[Social Recall] AI result success:', result?.success);
+    console.log('[Social Recall] AI result archetype:', result?.archetype);
+    console.log('[Social Recall] AI result skills:', result?.skills);
+    console.log('[Social Recall] AI result error:', result?.error);
 
     if (result.success && result.archetype) {
       // AI inference succeeded - map to 11 core archetypes + Unknown

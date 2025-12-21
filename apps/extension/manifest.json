@@ -5,7 +5,9 @@
   "description": "Remind you of people you came across on social networks",
   "permissions": ["storage", "activeTab", "scripting"],
   "host_permissions": [
-    "*://*.linkedin.com/*"
+    "*://*.linkedin.com/*",
+    "https://social-recall.vercel.app/*",
+    "https://*.vercel.app/*"
   ],
   "content_scripts": [
     {

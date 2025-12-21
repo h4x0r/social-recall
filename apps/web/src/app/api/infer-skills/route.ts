@@ -2,6 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateText } from 'ai';
 import { getGlobalRateLimiter } from '@/lib/rate-limiter';
 
+// CORS headers for extension requests
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
+// Handle CORS preflight
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 200, headers: corsHeaders });
+}
+
 // Skill taxonomy categories
 const SKILL_CATEGORIES = [
   'Security',
@@ -268,6 +280,7 @@ export async function POST(request: NextRequest) {
         {
           status: 429,
           headers: {
+            ...corsHeaders,
             'X-RateLimit-Remaining': '0',
             ...(resetTime && { 'X-RateLimit-Reset': String(resetTime) }),
           },
@@ -280,7 +293,7 @@ export async function POST(request: NextRequest) {
     if (!profile || !profile.name || !profile.headline) {
       return NextResponse.json(
         { error: 'Missing required profile data (name, headline)' },
-        { status: 400 }
+        { status: 400, headers: corsHeaders }
       );
     }
 
@@ -297,7 +310,7 @@ export async function POST(request: NextRequest) {
     if (!text) {
       return NextResponse.json(
         { error: 'Empty response from AI' },
-        { status: 502 }
+        { status: 502, headers: corsHeaders }
       );
     }
 
@@ -318,6 +331,7 @@ export async function POST(request: NextRequest) {
       },
       {
         headers: {
+          ...corsHeaders,
           'X-RateLimit-Remaining': String(remaining),
         },
       }
@@ -327,7 +341,7 @@ export async function POST(request: NextRequest) {
     const message = error instanceof Error ? error.message : 'Internal server error';
     return NextResponse.json(
       { error: message },
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     );
   }
 }
