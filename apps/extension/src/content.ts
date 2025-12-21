@@ -318,10 +318,19 @@ async function handleProfilePage(): Promise<void> {
     panel.setPosition(savedPosition.x, savedPosition.y);
   }
 
-  // Give LinkedIn SPA time to initialize before we start checking
-  // LinkedIn needs time to hydrate the page and start loading sections
-  console.log('[Social Recall] Waiting for LinkedIn SPA to initialize...');
-  await wait(3000);
+  // Give LinkedIn SPA time to initialize, but trigger scroll early to start lazy loading
+  console.log('[Social Recall] Triggering early scroll to start content loading...');
+
+  // Scroll down to trigger lazy loading of profile sections
+  window.scrollTo(0, 500);
+  await wait(500);
+  window.scrollTo(0, 1000);
+  await wait(500);
+  window.scrollTo(0, 0);
+
+  // Wait for LinkedIn SPA to hydrate and load sections
+  console.log('[Social Recall] Waiting for LinkedIn SPA to load sections...');
+  await wait(2000);
 
   // Re-check context validity after wait
   if (!isExtensionContextValid()) {
