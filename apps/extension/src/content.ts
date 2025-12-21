@@ -137,6 +137,32 @@ function completeExtraction(profileId: string, durationMs: number): void {
 }
 
 /**
+ * Load recent profiles from storage and show in history panel
+ */
+async function loadAndShowHistory(): Promise<void> {
+  if (!panel) return;
+
+  return new Promise((resolve) => {
+    chrome.storage.sync.get(['socialNotes'], (result: StorageData) => {
+      const notes = result.socialNotes || {};
+      const profiles = Object.entries(notes)
+        .map(([profileId, data]) => ({
+          profileId,
+          name: data.name,
+          headline: data.headline,
+          avatarUrl: data.avatarUrl,
+          lastSeen: data.lastSeen || new Date().toISOString(),
+        }))
+        .sort((a, b) => new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime())
+        .slice(0, 10); // Show last 10 profiles
+
+      panel.showHistory(profiles);
+      resolve();
+    });
+  });
+}
+
+/**
  * Initialize the floating panel on all LinkedIn pages
  * Shows full intelligence on profile pages, minimal orb elsewhere
  */
@@ -159,10 +185,11 @@ function initialize(): void {
     console.log('[Social Recall] On profile page, extracting intelligence...');
     handleProfilePage();
   } else {
-    console.log('[Social Recall] Not a profile page, showing minimal orb');
-    // Show minimal state - just the orb with no intelligence
+    console.log('[Social Recall] Not a profile page, showing history mode');
+    // Show history mode - recent profiles when clicked
     if (panel) {
       panel.setMinimalMode(true);
+      loadAndShowHistory();
     }
   }
 
@@ -262,6 +289,10 @@ async function handleProfilePage(): Promise<void> {
   if (savedPosition && panel) {
     panel.setPosition(savedPosition.x, savedPosition.y);
   }
+
+  // Give LinkedIn SPA time to initialize before we start checking
+  console.log('[Social Recall] Waiting for LinkedIn SPA to initialize...');
+  await wait(1500);
 
   // Extract profile data from page (includes background activity fetch)
   const profileData = await extractProfileData(profileId, startTime);
@@ -387,19 +418,89 @@ function closeModals(): void {
 }
 
 /**
+ * Wait for LinkedIn content to load (shimmer placeholders to disappear)
+ */
+async function waitForContentLoad(maxWaitMs: number = 15000): Promise<boolean> {
+  const startTime = Date.now();
+  const checkInterval = 300;
+  let scrollTriggered = false;
+
+  while (Date.now() - startTime < maxWaitMs) {
+    // Check for profile sections with actual content
+    const sections = document.querySelectorAll('section.artdeco-card, section[class*="artdeco-card"]');
+    let sectionsWithContent = 0;
+
+    for (const sec of sections) {
+      const text = sec.textContent?.trim() || '';
+      // More lenient: 30 chars is enough to have real content
+      if (text.length > 30) {
+        sectionsWithContent++;
+      }
+    }
+
+    // Check for "Experience" span specifically
+    const hasExperienceSpan = document.querySelector('.pvs-header__title')?.textContent?.includes('Experience') ||
+      Array.from(document.querySelectorAll('h2 span')).some(span => span.textContent?.trim() === 'Experience');
+
+    // Check for profile name (in the main h1)
+    const profileNameEl = document.querySelector('h1');
+    const hasProfileName = profileNameEl?.textContent?.trim().length > 0;
+
+    // Check for company logos as indicator of loaded experience
+    const companyLogos = document.querySelectorAll('img[src*="company-logo"], img[src*="shrink_100"]');
+    const hasCompanyLogos = companyLogos.length > 0;
+
+    // Check for pvs-entity items (actual list items in sections)
+    const pvsEntities = document.querySelectorAll('.pvs-entity, [class*="pvs-entity"]');
+    const hasPvsEntities = pvsEntities.length > 3;
+
+    // Check for loaded profile photo
+    const hasProfilePhoto = document.querySelector('img.pv-top-card-profile-picture__image, img[class*="profile-photo"]') !== null;
+
+    console.log(`[Social Recall] Content check: sections=${sections.length}, withContent=${sectionsWithContent}, expSpan=${hasExperienceSpan}, name=${hasProfileName}, logos=${companyLogos.length}, entities=${pvsEntities.length}, photo=${hasProfilePhoto}`);
+
+    // Content is ready when we have meaningful content indicators
+    // Name + (either sections with content, Experience header, company logos, or pvs-entity items)
+    if (hasProfileName && (sectionsWithContent >= 2 || hasExperienceSpan || hasCompanyLogos || hasPvsEntities)) {
+      console.log('[Social Recall] Content loaded successfully');
+      return true;
+    }
+
+    // If we haven't scrolled yet and we're past 3 seconds, scroll to trigger lazy load
+    if (!scrollTriggered && Date.now() - startTime > 3000) {
+      console.log('[Social Recall] Triggering scroll to load lazy content');
+      scrollTriggered = true;
+      // Scroll down a bit to trigger lazy loading
+      window.scrollBy(0, 500);
+      await wait(200);
+      window.scrollTo(0, 0);
+    }
+
+    await wait(checkInterval);
+  }
+
+  console.log('[Social Recall] Content load timeout - proceeding anyway');
+  return false;
+}
+
+/**
  * Extract profile data from the current LinkedIn page
  * Expands all sections first, then extracts data
  */
 async function extractProfileData(profileId: string, startTime: number): Promise<Partial<StoredProfile>> {
-  // Expand all sections first to get full data
+  // Wait for LinkedIn content to actually load
   updateProgress('expanding', startTime);
+  console.log('[Social Recall] Waiting for content to load...');
+  await waitForContentLoad();
+
+  // Expand all sections first to get full data
   await expandAllSections();
 
-  // Debug: Log all section IDs found on page
-  const sectionIds = Array.from(document.querySelectorAll('[id]'))
-    .map(el => el.id)
-    .filter(id => id && !id.startsWith('ember'));
-  console.log('[Social Recall] Available section IDs:', sectionIds.slice(0, 30));
+  // Wait a bit more after expansion
+  await wait(500);
+
+  // Debug: Comprehensive DOM inspection
+  debugLinkedInDOM();
 
   // Extract education
   updateProgress('education', startTime);
@@ -485,179 +586,580 @@ function extractAvatarUrl(): string | undefined {
   return avatarImg?.src;
 }
 
+function debugLinkedInDOM(): void {
+  console.log('[Social Recall] ===== DOM INSPECTION =====');
+
+  // Find all sections with artdeco-card class
+  const sections = document.querySelectorAll('section.artdeco-card, section.pv-profile-card, section[class*="artdeco-card"]');
+  console.log(`[Social Recall] Profile sections found: ${sections.length}`);
+
+  sections.forEach((sec, i) => {
+    // Try to find ANY text that could be a header in the first few elements
+    const firstText = sec.textContent?.slice(0, 100).replace(/\s+/g, ' ').trim();
+    console.log(`[Social Recall] section[${i}]: "${firstText?.slice(0, 50)}..."`);
+  });
+
+  // Find where "Experience" text actually lives
+  const allSpans = document.querySelectorAll('span');
+  for (const span of allSpans) {
+    if (span.textContent?.trim() === 'Experience') {
+      const parent = span.parentElement;
+      const grandparent = parent?.parentElement;
+      console.log(`[Social Recall] "Experience" span parent: ${parent?.tagName}.${parent?.className.slice(0, 40)}`);
+      console.log(`[Social Recall] "Experience" span grandparent: ${grandparent?.tagName}.${grandparent?.className.slice(0, 40)}`);
+      const section = span.closest('section');
+      console.log(`[Social Recall] "Experience" closest section: ${section?.className.slice(0, 50)}`);
+      break;
+    }
+  }
+
+  console.log('[Social Recall] ===== END DOM INSPECTION =====');
+}
+
+function findSectionByHeader(headerText: string): Element | null {
+  const searchText = headerText.toLowerCase();
+
+  // Strategy 1: Find via pvs-header__title (LinkedIn's current structure)
+  const pvsHeaders = document.querySelectorAll('.pvs-header__title, h2.pvs-header__title');
+  for (const header of pvsHeaders) {
+    const text = header.textContent?.trim().toLowerCase();
+    if (text === searchText || text?.startsWith(searchText)) {
+      const section = header.closest('section.artdeco-card, section.pv-profile-card, section[class*="artdeco-card"]');
+      if (section) {
+        console.log(`[Social Recall] Found "${headerText}" via pvs-header__title`);
+        return section;
+      }
+    }
+  }
+
+  // Strategy 2: Find any h2 with the text and get its section
+  const h2s = document.querySelectorAll('h2');
+  for (const h2 of h2s) {
+    const text = h2.textContent?.trim().toLowerCase();
+    if (text === searchText || text?.startsWith(searchText)) {
+      const section = h2.closest('section');
+      if (section) {
+        console.log(`[Social Recall] Found "${headerText}" via h2`);
+        return section;
+      }
+    }
+  }
+
+  // Strategy 3: Find pv-profile-card sections with matching text
+  const profileCards = document.querySelectorAll('section.pv-profile-card, section[class*="artdeco-card"]');
+  for (const card of profileCards) {
+    const headerEl = card.querySelector('h2, .pvs-header__title');
+    if (headerEl?.textContent?.trim().toLowerCase().includes(searchText)) {
+      console.log(`[Social Recall] Found "${headerText}" via pv-profile-card`);
+      return card;
+    }
+  }
+
+  console.log(`[Social Recall] Could not find "${headerText}" section`);
+  return null;
+}
+
 function extractEmployers(): Employer[] {
   const employers: Employer[] = [];
-  const experienceSection = document.querySelector('#experience');
-  console.log('[Social Recall] Experience section found:', !!experienceSection);
-  if (!experienceSection) {
-    // Try alternative selectors
-    const altSection = document.querySelector('[data-section="experience"]') ||
-      document.querySelector('section:has(#experience-section)');
-    console.log('[Social Recall] Alternative experience section:', !!altSection);
-  }
-  if (!experienceSection) return employers;
+  const seen = new Set<string>();
 
-  const items = experienceSection.querySelectorAll('li.artdeco-list__item');
-  items.forEach((item) => {
-    const companyEl = item.querySelector('.t-14.t-normal span[aria-hidden="true"]');
-    const logoImg = item.querySelector('img[width="48"]') as HTMLImageElement;
-    if (companyEl?.textContent) {
-      employers.push({
-        company: companyEl.textContent.trim().split(' · ')[0],
-        logo: logoImg?.src || '',
-      });
+  // ONLY extract from Experience section - don't search the whole page
+  const experienceSection = findSectionByHeader('Experience');
+
+  if (experienceSection) {
+    console.log('[Social Recall] Found Experience section, extracting employers');
+
+    // Find all divs that look like experience entries within the section
+    // LinkedIn uses nested divs, not li elements
+    const allDivs = experienceSection.querySelectorAll('div');
+
+    for (const div of allDivs) {
+      // Look for divs that contain company logo images
+      const img = div.querySelector('img[src*="company-logo"], img[src*="shrink_100"]') as HTMLImageElement;
+      if (!img) continue;
+
+      // Make sure this div is a direct container (not a parent of many items)
+      const nestedImgs = div.querySelectorAll('img[src*="company-logo"], img[src*="shrink_100"]');
+      if (nestedImgs.length > 1) continue; // Skip parent containers
+
+      // Extract company name from this specific experience entry
+      const companyName = extractCompanyNameFromExperience(div);
+      if (companyName && !seen.has(companyName.toLowerCase())) {
+        seen.add(companyName.toLowerCase());
+        employers.push({
+          company: companyName,
+          logo: img.src || '',
+        });
+        console.log(`[Social Recall] Found employer: ${companyName}`);
+      }
     }
-  });
+  } else {
+    console.log('[Social Recall] Experience section not found');
+  }
+
+  console.log('[Social Recall] Extracted employers:', employers.length, employers.map(e => e.company));
   return employers;
 }
 
+function extractCompanyNameFromExperience(container: Element): string | null {
+  // In LinkedIn's experience entries:
+  // - Job title is in bold (t-bold)
+  // - Company name is in t-14 t-normal, often with " · Full-time" suffix
+  // We want the company name, not the job title
+
+  const spans = container.querySelectorAll('span[aria-hidden="true"]');
+  const texts: string[] = [];
+
+  for (const span of spans) {
+    const text = span.textContent?.trim();
+    if (!text || text.length < 2) continue;
+
+    // Skip date-like text
+    if (/^\w{3} \d{4}/.test(text) || /^\d{4}/.test(text) || text.includes('Present')) continue;
+    if (/^\d+\s*(yr|yrs|mo|mos|year|years|month|months)/.test(text)) continue;
+
+    // Skip location text (City, State/Country format)
+    if (/^[A-Z][a-z]+.*,.*\s*(Remote|Hybrid|On-site)$/i.test(text)) continue;
+    if (/^(Remote|Hybrid|On-site)$/i.test(text)) continue;
+
+    // Skip skills text
+    if (text.includes('skills') || text.includes('Penetration') || text.includes('Security and')) continue;
+
+    texts.push(text);
+  }
+
+  // Look for company name pattern - typically contains " · " with employment type
+  for (const text of texts) {
+    if (text.includes(' · ')) {
+      // "NEVERHACK Estonia · Full-time" -> "NEVERHACK Estonia"
+      // "Covert Security · Self-employed" -> "Covert Security"
+      const parts = text.split(' · ');
+      const company = parts[0].trim();
+      // Make sure it's not a job title (job titles don't usually have · suffix)
+      if (company.length > 2 && company.length < 80) {
+        return company;
+      }
+    }
+  }
+
+  // Fallback: look for text that looks like a company (not a job title)
+  // Job titles typically start with specific words
+  const jobTitlePatterns = /^(founder|ceo|cto|cfo|coo|president|director|manager|lead|senior|junior|engineer|developer|analyst|consultant|specialist|coordinator|associate|intern|head of|vp|vice)/i;
+
+  for (const text of texts) {
+    if (text.length > 2 && text.length < 80) {
+      // Skip job titles
+      if (jobTitlePatterns.test(text)) continue;
+      // Skip if it contains common job title words
+      if (/\b(and|of|at)\b/i.test(text) && text.split(' ').length <= 4) continue;
+
+      return text;
+    }
+  }
+
+  return null;
+}
+
+function extractEmployersFromContainer(container: Element, employers: Employer[], seen: Set<string>): void {
+  // Find list items within the container
+  const items = container.querySelectorAll('li[class*="pvs-list__item"], li[class*="artdeco-list__item"], li');
+
+  for (const item of items) {
+    const companyName = extractCompanyNameFromItem(item);
+    if (companyName && !seen.has(companyName.toLowerCase())) {
+      seen.add(companyName.toLowerCase());
+      const logoImg = item.querySelector('img[width="48"], img[class*="entity-image"], img[src*="company-logo"]') as HTMLImageElement;
+      employers.push({
+        company: companyName,
+        logo: logoImg?.src || '',
+      });
+    }
+  }
+}
+
+function extractCompanyNameFromItem(item: Element): string | null {
+  // Try multiple selectors for company name
+  const selectors = [
+    '.t-14.t-normal span[aria-hidden="true"]',
+    '[class*="t-normal"] span[aria-hidden="true"]',
+    '.hoverable-link-text span[aria-hidden="true"]',
+    'span.t-14.t-normal',
+    // For grouped experience (multiple roles at same company)
+    '.t-bold span[aria-hidden="true"]',
+    // Fallback to any text elements
+    'span[aria-hidden="true"]',
+  ];
+
+  for (const sel of selectors) {
+    const el = item.querySelector(sel);
+    if (el?.textContent?.trim()) {
+      const text = el.textContent.trim();
+
+      // Skip if it looks like a date range
+      if (/^\w{3} \d{4}/.test(text) || /^\d{4}/.test(text) || text.includes('Present')) {
+        continue;
+      }
+
+      // Company name is usually before " · " separator
+      const company = text.split(' · ')[0].trim();
+
+      // Filter out garbage data
+      if (!isValidCompanyName(company)) {
+        continue;
+      }
+
+      if (company && company.length > 1 && company.length < 100) {
+        return company;
+      }
+    }
+  }
+
+  return null;
+}
+
+function isValidCompanyName(name: string): boolean {
+  if (!name || name.length < 2) return false;
+
+  const lowerName = name.toLowerCase();
+
+  // Skip education-like entries
+  if (/^(bachelor|master|doctor|j\.?d\.?|m\.?d\.?|ph\.?d\.?|b\.?s\.?|b\.?a\.?|m\.?s\.?|m\.?a\.?|m\.?b\.?a\.?)/i.test(name)) {
+    return false;
+  }
+
+  // Skip connection degree indicators
+  if (/^·\s*(1st|2nd|3rd)$/i.test(name)) {
+    return false;
+  }
+
+  // Skip follower counts
+  if (/^\d+[\d,]*\s*followers?$/i.test(name)) {
+    return false;
+  }
+
+  // Skip if it's just a person's name (typically short, 1-3 words, no company indicators)
+  // But be careful - some companies are named after people
+  const words = name.split(/\s+/);
+  if (words.length <= 2 && !lowerName.includes('inc') && !lowerName.includes('llc') &&
+      !lowerName.includes('corp') && !lowerName.includes('company') &&
+      !lowerName.includes('institute') && !lowerName.includes('group') &&
+      !lowerName.includes('consulting') && !lowerName.includes('services') &&
+      !lowerName.includes('solutions') && !lowerName.includes('partners')) {
+    // Check if it looks like "FirstName LastName" or "FirstName L."
+    if (/^[A-Z][a-z]+\s+[A-Z]\.?$/.test(name) || /^[A-Z][a-z]+\s+[A-Z][a-z]+$/.test(name)) {
+      // Could be a person's name, skip unless it has company-like suffixes
+      return false;
+    }
+  }
+
+  // Skip degree fields and honors
+  if (lowerName.includes('summa cum laude') || lowerName.includes('magna cum laude') ||
+      lowerName.includes('cum laude') || lowerName.includes('phi beta kappa') ||
+      lowerName.includes('legal studies') || lowerName.includes('computer science') ||
+      lowerName.includes('business administration')) {
+    return false;
+  }
+
+  // Skip job titles that got picked up
+  if (/^(senior|junior|chief|vice|president|director|manager|engineer|developer|analyst|consultant|attorney|lawyer|counsel|partner|associate|intern)/i.test(name) &&
+      !lowerName.includes('inc') && !lowerName.includes('llc') && !lowerName.includes('corp')) {
+    return false;
+  }
+
+  // Skip discussion/podcast entries
+  if (lowerName.includes('discussions from') || lowerName.includes('podcast')) {
+    return false;
+  }
+
+  return true;
+}
+
 function extractAbout(): string | undefined {
-  // About section has id="about" with content in a div below
-  const aboutSection = document.querySelector('#about');
+  const aboutSection = findSectionByHeader('About');
   if (!aboutSection) return undefined;
 
-  const container = aboutSection.closest('section');
-  const textEl = container?.querySelector('.pv-shared-text-with-see-more span[aria-hidden="true"]');
+  const textEl = aboutSection.querySelector('.pv-shared-text-with-see-more span[aria-hidden="true"]') ||
+    aboutSection.querySelector('[class*="inline-show-more-text"] span[aria-hidden="true"]') ||
+    aboutSection.querySelector('span[aria-hidden="true"]');
   return textEl?.textContent?.trim();
 }
 
 function extractEducation(): Education[] {
   const education: Education[] = [];
-  const section = document.querySelector('#education');
-  if (!section) return education;
+  const section = findSectionByHeader('Education');
+  if (!section) {
+    console.log('[Social Recall] Education section not found');
+    return education;
+  }
 
-  const items = section.querySelectorAll('li.artdeco-list__item');
-  items.forEach((item) => {
-    const schoolEl = item.querySelector('.t-bold span[aria-hidden="true"]');
-    const degreeEl = item.querySelector('.t-14.t-normal span[aria-hidden="true"]');
-    const datesEl = item.querySelector('.t-14.t-normal.t-black--light span[aria-hidden="true"]');
+  console.log('[Social Recall] Found Education section');
+  const seen = new Set<string>();
 
-    if (schoolEl?.textContent) {
-      const degreeText = degreeEl?.textContent?.trim() || '';
-      const [degree, field] = degreeText.split(',').map(s => s.trim());
-      education.push({
-        school: schoolEl.textContent.trim(),
-        degree,
-        field,
-        dates: datesEl?.textContent?.trim(),
-      });
+  // Find divs with school logo images (education entries have school logos)
+  const allDivs = section.querySelectorAll('div');
+
+  for (const div of allDivs) {
+    // Look for divs containing education logo images
+    const img = div.querySelector('img[src*="shrink_100"], img[src*="company-logo"]') as HTMLImageElement;
+    if (!img) continue;
+
+    // Skip parent containers with multiple images
+    const nestedImgs = div.querySelectorAll('img[src*="shrink_100"], img[src*="company-logo"]');
+    if (nestedImgs.length > 1) continue;
+
+    // Extract education info from spans
+    const spans = div.querySelectorAll('span[aria-hidden="true"]');
+    let school = '';
+    let degree = '';
+    let field = '';
+    let dates = '';
+
+    for (const span of spans) {
+      const text = span.textContent?.trim();
+      if (!text) continue;
+
+      // Date pattern: "1989 - 1992" or "2020 - Present"
+      if (/^\d{4}\s*-\s*(\d{4}|Present)$/.test(text)) {
+        dates = text;
+        continue;
+      }
+
+      // School name is usually the first substantial text (often bold)
+      if (!school && text.length > 2 && !text.includes(',')) {
+        // Check if parent has bold styling
+        const parentClasses = span.parentElement?.className || '';
+        if (parentClasses.includes('bold') || parentClasses.includes('t-bold')) {
+          school = text;
+          continue;
+        }
+      }
+
+      // Degree info often contains comma: "Bachelor's, Computer Science"
+      if (!degree && text.includes(',')) {
+        const parts = text.split(',').map(s => s.trim());
+        degree = parts[0];
+        field = parts.slice(1).join(', ');
+        continue;
+      }
+
+      // If we don't have school yet, this might be it
+      if (!school && text.length > 2 && text.length < 100) {
+        school = text;
+      }
     }
-  });
+
+    if (school && !seen.has(school.toLowerCase())) {
+      seen.add(school.toLowerCase());
+      education.push({ school, degree, field, dates });
+      console.log(`[Social Recall] Found education: ${school}`);
+    }
+  }
+
+  console.log('[Social Recall] Extracted education:', education.length);
   return education;
 }
 
 function extractHonorsAwards(): string[] {
   const awards: string[] = [];
-  const section = document.querySelector('#honors_and_awards');
+  const section = findSectionByHeader('Honors') || findSectionByHeader('Awards');
   if (!section) return awards;
 
-  const items = section.querySelectorAll('li.artdeco-list__item');
-  items.forEach((item) => {
-    const titleEl = item.querySelector('.t-bold span[aria-hidden="true"]');
-    if (titleEl?.textContent) {
-      awards.push(titleEl.textContent.trim());
+  const seen = new Set<string>();
+  // Look for bold text in the section (award names are typically bold)
+  const boldSpans = section.querySelectorAll('.t-bold span[aria-hidden="true"], span.t-bold');
+
+  for (const span of boldSpans) {
+    const text = span.textContent?.trim();
+    if (text && text.length > 2 && text.length < 100 && !seen.has(text.toLowerCase())) {
+      seen.add(text.toLowerCase());
+      awards.push(text);
     }
-  });
+  }
+
   return awards;
 }
 
 function extractCourses(): string[] {
   const courses: string[] = [];
-  const section = document.querySelector('#courses');
+  const section = findSectionByHeader('Courses');
   if (!section) return courses;
 
-  const items = section.querySelectorAll('li.artdeco-list__item');
-  items.forEach((item) => {
-    const titleEl = item.querySelector('.t-bold span[aria-hidden="true"]');
-    if (titleEl?.textContent) {
-      courses.push(titleEl.textContent.trim());
+  const seen = new Set<string>();
+  const boldSpans = section.querySelectorAll('.t-bold span[aria-hidden="true"], span.t-bold');
+
+  for (const span of boldSpans) {
+    const text = span.textContent?.trim();
+    if (text && text.length > 2 && text.length < 100 && !seen.has(text.toLowerCase())) {
+      seen.add(text.toLowerCase());
+      courses.push(text);
     }
-  });
+  }
+
   return courses;
 }
 
 function extractLanguages(): string[] {
   const languages: string[] = [];
-  const section = document.querySelector('#languages');
+  const section = findSectionByHeader('Languages');
   if (!section) return languages;
 
-  const items = section.querySelectorAll('li.artdeco-list__item');
-  items.forEach((item) => {
-    const langEl = item.querySelector('.t-bold span[aria-hidden="true"]');
-    if (langEl?.textContent) {
-      languages.push(langEl.textContent.trim());
+  const seen = new Set<string>();
+  const boldSpans = section.querySelectorAll('.t-bold span[aria-hidden="true"], span.t-bold');
+
+  for (const span of boldSpans) {
+    const text = span.textContent?.trim();
+    // Language names are short
+    if (text && text.length > 1 && text.length < 50 && !seen.has(text.toLowerCase())) {
+      seen.add(text.toLowerCase());
+      languages.push(text);
     }
-  });
+  }
+
   return languages;
 }
 
 function extractVolunteering(): Volunteering[] {
   const volunteering: Volunteering[] = [];
-  const section = document.querySelector('#volunteering_experience');
-  if (!section) return volunteering;
+  const section = findSectionByHeader('Volunteer');
+  if (!section) {
+    console.log('[Social Recall] Volunteer section not found');
+    return volunteering;
+  }
 
-  const items = section.querySelectorAll('li.artdeco-list__item');
-  items.forEach((item) => {
-    const roleEl = item.querySelector('.t-bold span[aria-hidden="true"]');
-    const orgEl = item.querySelector('.t-14.t-normal span[aria-hidden="true"]');
-    const causeEl = item.querySelector('.t-14.t-normal.t-black--light span[aria-hidden="true"]');
+  console.log('[Social Recall] Found Volunteer section');
+  const seen = new Set<string>();
 
-    if (roleEl?.textContent || orgEl?.textContent) {
-      volunteering.push({
-        organization: orgEl?.textContent?.trim() || '',
-        role: roleEl?.textContent?.trim(),
-        cause: causeEl?.textContent?.trim(),
-      });
+  // Find divs with organization logos or volunteer entries
+  const allDivs = section.querySelectorAll('div');
+
+  for (const div of allDivs) {
+    // Look for entries (may or may not have images)
+    const img = div.querySelector('img[src*="shrink_100"], img[src*="company-logo"]') as HTMLImageElement;
+
+    // For volunteering, we might not always have images, so check for text patterns too
+    const spans = div.querySelectorAll('span[aria-hidden="true"]');
+    if (spans.length < 2) continue; // Need at least role/org
+
+    // Skip nested containers
+    if (img) {
+      const nestedImgs = div.querySelectorAll('img[src*="shrink_100"], img[src*="company-logo"]');
+      if (nestedImgs.length > 1) continue;
     }
-  });
+
+    let role = '';
+    let organization = '';
+    let cause = '';
+
+    for (const span of spans) {
+      const text = span.textContent?.trim();
+      if (!text || text.length < 2) continue;
+
+      // Skip date ranges
+      if (/^\w{3} \d{4}\s*-/.test(text) || /^\d+\s*(yr|mo)/.test(text)) {
+        continue;
+      }
+
+      // Role is typically bold
+      if (!role) {
+        const parentClasses = span.parentElement?.className || '';
+        if (parentClasses.includes('bold') || parentClasses.includes('t-bold')) {
+          role = text;
+          continue;
+        }
+      }
+
+      // Organization comes after role
+      if (role && !organization && text.length > 2) {
+        organization = text;
+        continue;
+      }
+
+      // If no role yet, first text might be it
+      if (!role && text.length > 2 && text.length < 80) {
+        role = text;
+      }
+    }
+
+    const key = `${role}-${organization}`.toLowerCase();
+    if ((role || organization) && !seen.has(key)) {
+      seen.add(key);
+      volunteering.push({ organization, role, cause });
+      console.log(`[Social Recall] Found volunteering: ${role} at ${organization}`);
+    }
+  }
+
+  console.log('[Social Recall] Extracted volunteering:', volunteering.length);
   return volunteering;
 }
 
 function extractCertifications(): Certification[] {
   const certifications: Certification[] = [];
-  const section = document.querySelector('#licenses_and_certifications');
-  if (!section) return certifications;
+  const section = findSectionByHeader('Licenses') || findSectionByHeader('Certifications');
+  if (!section) {
+    console.log('[Social Recall] Certifications section not found');
+    return certifications;
+  }
 
-  const items = section.querySelectorAll('li.artdeco-list__item');
-  items.forEach((item) => {
-    const nameEl = item.querySelector('.t-bold span[aria-hidden="true"]');
-    const issuerEl = item.querySelector('.t-14.t-normal span[aria-hidden="true"]');
+  console.log('[Social Recall] Found Certifications section');
+  const seen = new Set<string>();
 
-    // Date info is in t-black--light spans, may contain "Issued" and "Expires"
-    const dateEls = item.querySelectorAll('.t-14.t-normal.t-black--light span[aria-hidden="true"]');
+  // Find divs with certification logos
+  const allDivs = section.querySelectorAll('div');
+
+  for (const div of allDivs) {
+    const img = div.querySelector('img[src*="shrink_100"], img[src*="company-logo"]') as HTMLImageElement;
+    if (!img) continue;
+
+    const nestedImgs = div.querySelectorAll('img[src*="shrink_100"], img[src*="company-logo"]');
+    if (nestedImgs.length > 1) continue;
+
+    const spans = div.querySelectorAll('span[aria-hidden="true"]');
+    let name = '';
+    let issuer = '';
     let issueDate: string | undefined;
-    let expirationDate: string | undefined;
-    let credentialId: string | undefined;
 
-    dateEls.forEach((el) => {
-      const text = el.textContent?.trim() || '';
+    for (const span of spans) {
+      const text = span.textContent?.trim();
+      if (!text) continue;
+
+      // Issue date pattern: "Issued Jun 2023" or "Jun 2023"
       if (text.startsWith('Issued ')) {
         issueDate = text.replace('Issued ', '');
-      } else if (text.startsWith('Expires ')) {
-        expirationDate = text.replace('Expires ', '');
-      } else if (text.includes('Credential ID')) {
-        credentialId = text.replace('Credential ID ', '').trim();
-      } else if (!issueDate && /^[A-Z][a-z]{2} \d{4}$/.test(text)) {
-        // Fallback: plain date format like "Jan 2023"
-        issueDate = text;
+        continue;
       }
-    });
+      if (/^[A-Z][a-z]{2} \d{4}$/.test(text)) {
+        issueDate = text;
+        continue;
+      }
 
-    // Credential URL from "Show credential" link
-    const credentialLink = item.querySelector('a[href*="credential"]') as HTMLAnchorElement;
-    const credentialUrl = credentialLink?.href;
+      // First substantial text is likely the certification name
+      if (!name && text.length > 2) {
+        const parentClasses = span.parentElement?.className || '';
+        if (parentClasses.includes('bold') || parentClasses.includes('t-bold')) {
+          name = text;
+          continue;
+        }
+      }
 
-    if (nameEl?.textContent) {
-      certifications.push({
-        name: nameEl.textContent.trim(),
-        issuer: issuerEl?.textContent?.trim(),
-        issueDate,
-        expirationDate,
-        credentialId,
-        credentialUrl,
-      });
+      // Issuer is typically second
+      if (name && !issuer && text.length > 2) {
+        issuer = text;
+        continue;
+      }
+
+      if (!name && text.length > 2 && text.length < 100) {
+        name = text;
+      }
     }
-  });
+
+    if (name && !seen.has(name.toLowerCase())) {
+      seen.add(name.toLowerCase());
+      certifications.push({ name, issuer, issueDate });
+      console.log(`[Social Recall] Found certification: ${name}`);
+    }
+  }
+
+  console.log('[Social Recall] Extracted certifications:', certifications.length);
   return certifications;
 }
 
@@ -673,8 +1175,35 @@ async function fetchActivitiesFromActivityPage(profileId: string): Promise<Activ
   const activities: Activity[] = [];
   const MAX_ACTIVITIES = 20;
 
+  // First, try to extract activity from the current profile page's Activity section
+  const activitySection = findSectionByHeader('Activity');
+  if (activitySection) {
+    console.log('[Social Recall] Found Activity section on profile page');
+    const postTexts = activitySection.querySelectorAll('span[aria-hidden="true"]');
+    for (const span of postTexts) {
+      if (activities.length >= MAX_ACTIVITIES) break;
+      const text = span.textContent?.trim();
+      // Look for substantial text that looks like a post (not UI elements)
+      if (text && text.length > 50 && !text.includes('Show all') && !text.includes('follower')) {
+        activities.push({
+          type: 'post',
+          text: text.slice(0, 500),
+        });
+        console.log(`[Social Recall] Found activity post: ${text.slice(0, 50)}...`);
+      }
+    }
+  }
+
+  // If we found posts on the profile page, return them
+  if (activities.length > 0) {
+    console.log(`[Social Recall] Extracted ${activities.length} posts from profile Activity section`);
+    return activities;
+  }
+
+  // Fallback: try fetching the activity page (may not work due to SPA)
   try {
     const activityUrl = `https://www.linkedin.com/in/${profileId}/recent-activity/all/`;
+    console.log('[Social Recall] Fetching activity page:', activityUrl);
     const response = await fetch(activityUrl, {
       credentials: 'include', // Include cookies for auth
     });
@@ -685,6 +1214,7 @@ async function fetchActivitiesFromActivityPage(profileId: string): Promise<Activ
     }
 
     const html = await response.text();
+    console.log('[Social Recall] Activity page HTML length:', html.length);
 
     // Parse the HTML to extract activities
     const parser = new DOMParser();
@@ -692,6 +1222,7 @@ async function fetchActivitiesFromActivityPage(profileId: string): Promise<Activ
 
     // Find activity items in the parsed document
     const items = doc.querySelectorAll('.feed-shared-update-v2, .occludable-update');
+    console.log('[Social Recall] Activity items found in fetched HTML:', items.length);
 
     for (const item of Array.from(items)) {
       if (activities.length >= MAX_ACTIVITIES) break;
@@ -1079,9 +1610,10 @@ function observeUrlChanges(): void {
         setTimeout(() => handleProfilePage(), 500);
       } else {
         console.log('[Social Recall] Navigated away from profile page');
-        // Switch to minimal mode
+        // Switch to history mode
         if (panel) {
           panel.setMinimalMode(true);
+          loadAndShowHistory();
         }
       }
     }

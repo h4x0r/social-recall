@@ -155,6 +155,7 @@ export interface Panel {
   showGate: () => void;
   setMinimalMode: (minimal: boolean) => void;
   setProgress: (progress: ExtractionProgress | null) => void;
+  showHistory: (profiles: { profileId: string; name: string; headline?: string; avatarUrl?: string; lastSeen: string }[]) => void;
 }
 
 function formatRelativeTime(date: Date): string {
@@ -458,26 +459,72 @@ export function createPanel(container: HTMLElement): Panel {
 
   let isMinimalMode = false;
 
+  interface RecentProfile {
+    profileId: string;
+    name: string;
+    headline?: string;
+    avatarUrl?: string;
+    lastSeen: string;
+  }
+
   function setMinimalMode(minimal: boolean): void {
     isMinimalMode = minimal;
     if (minimal) {
       element.classList.add('sr-panel--minimal');
-      orb.title = 'Social Recall - Visit a profile to see intelligence';
-      // Ensure we're in minimized state
-      if (state === PanelState.Expanded) {
-        toggle();
-      }
+      orb.title = 'Social Recall - Click to see recent profiles';
     } else {
       element.classList.remove('sr-panel--minimal');
       orb.title = '';
     }
   }
 
+  function showHistory(profiles: RecentProfile[]): void {
+    const recentHtml = profiles.length > 0
+      ? profiles.map(p => {
+          const initials = p.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+          const avatarContent = p.avatarUrl
+            ? `<img src="${p.avatarUrl}" alt="${p.name}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`
+            : initials;
+          const timeAgo = formatRelativeTime(new Date(p.lastSeen));
+          return `
+            <div class="sr-panel__history-item" data-profile-id="${p.profileId}">
+              <div class="sr-panel__history-avatar">${avatarContent}</div>
+              <div class="sr-panel__history-info">
+                <div class="sr-panel__history-name">${p.name}</div>
+                <div class="sr-panel__history-meta">${p.headline?.slice(0, 40) || 'LinkedIn'}</div>
+                <div class="sr-panel__history-time">${timeAgo}</div>
+              </div>
+            </div>
+          `;
+        }).join('')
+      : '<div class="sr-panel__history-empty">No profiles viewed yet</div>';
+
+    content.innerHTML = `
+      <div class="sr-panel__header">
+        <span class="sr-panel__name">Recent Profiles</span>
+        <button class="sr-panel__minimize">━</button>
+      </div>
+      <div class="sr-panel__body sr-panel__history">
+        ${recentHtml}
+      </div>
+    `;
+
+    const minimizeBtn = content.querySelector('.sr-panel__minimize');
+    minimizeBtn?.addEventListener('click', toggle);
+
+    // Add click handlers to open LinkedIn profiles
+    content.querySelectorAll('.sr-panel__history-item').forEach((item) => {
+      item.addEventListener('click', () => {
+        const profileId = item.getAttribute('data-profile-id');
+        if (profileId) {
+          window.open(`https://linkedin.com/in/${profileId}`, '_blank');
+        }
+      });
+    });
+  }
+
   orb.addEventListener('click', () => {
-    // Don't toggle in minimal mode - just show tooltip
-    if (!isMinimalMode) {
-      toggle();
-    }
+    toggle();
   });
 
   function setProgress(progress: ExtractionProgress | null): void {
@@ -528,5 +575,6 @@ export function createPanel(container: HTMLElement): Panel {
     showGate,
     setMinimalMode,
     setProgress,
+    showHistory,
   };
 }
