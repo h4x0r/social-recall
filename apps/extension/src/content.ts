@@ -10,6 +10,10 @@ console.log('[Social Recall] ===== CONTENT SCRIPT STARTING =====');
 import { createPanel, Archetype, type ProfileIntelligence, type Panel } from './panel';
 import { extractProfileIdFromUrl, isLinkedInProfileUrl, type Employer } from './utils';
 import { inferIntelligence, type ProfileData as AIProfileData } from './ai-client';
+import {
+  waitForLinkedInProfile,
+  waitForStable,
+} from './dom-utils';
 
 interface StoredProfile {
   name: string;
@@ -318,19 +322,8 @@ async function handleProfilePage(): Promise<void> {
     panel.setPosition(savedPosition.x, savedPosition.y);
   }
 
-  // Give LinkedIn SPA time to initialize, but trigger scroll early to start lazy loading
-  console.log('[Social Recall] Triggering early scroll to start content loading...');
-
-  // Scroll down to trigger lazy loading of profile sections
-  window.scrollTo(0, 500);
-  await wait(500);
-  window.scrollTo(0, 1000);
-  await wait(500);
-  window.scrollTo(0, 0);
-
-  // Wait for LinkedIn SPA to hydrate and load sections
-  console.log('[Social Recall] Waiting for LinkedIn SPA to load sections...');
-  await wait(2000);
+  // Use Playwright-like waiting for profile to load
+  await waitForLinkedInProfile({ timeout: 30000 });
 
   // Re-check context validity after wait
   if (!isExtensionContextValid()) {
@@ -469,139 +462,18 @@ function closeModals(): void {
 }
 
 /**
- * Wait for LinkedIn content to load (shimmer placeholders to disappear)
- */
-async function waitForContentLoad(maxWaitMs: number = 20000): Promise<boolean> {
-  const startTime = Date.now();
-  const checkInterval = 300;
-  let scrollTriggered = false;
-
-  while (Date.now() - startTime < maxWaitMs) {
-    // Check for profile sections with actual content
-    // Use multiple selectors to find sections
-    const sections = document.querySelectorAll('section[data-view-name="profile-card"], section.artdeco-card, section[class*="artdeco-card"]');
-    let sectionsWithContent = 0;
-
-    for (const sec of sections) {
-      const text = sec.textContent?.trim() || '';
-      // More lenient: 30 chars is enough to have real content
-      if (text.length > 30) {
-        sectionsWithContent++;
-      }
-    }
-
-    // Also check for pvs-list containers (key indicator of loaded content)
-    const pvsLists = document.querySelectorAll('.pvs-list__container, [class*="pvs-list"]');
-    const hasPvsLists = pvsLists.length > 0;
-
-    // Check for h2 elements with actual text (key indicator content loaded)
-    const h2s = document.querySelectorAll('h2');
-    let h2WithText = 0;
-    const h2Texts: string[] = [];
-    for (const h2 of h2s) {
-      const txt = h2.textContent?.trim();
-      if (txt && txt.length > 2) {
-        h2WithText++;
-        if (h2Texts.length < 5) h2Texts.push(txt.slice(0, 20));
-      }
-    }
-
-    // Check for "Experience" text anywhere in body
-    const bodyText = document.body.textContent || '';
-    const hasExperienceText = bodyText.includes('Experience') && bodyText.includes('Education');
-
-    // Check if main element has multiple children (profile sections loaded)
-    const mainEl = document.querySelector('main');
-    const mainChildCount = mainEl?.children.length || 0;
-
-    // Check for profile name (in the main h1)
-    const profileNameEl = document.querySelector('h1');
-    const hasProfileName = profileNameEl?.textContent?.trim().length > 0;
-
-    // Check for company logos inside sections
-    const experienceLogos = document.querySelectorAll('section img[src*="company-logo"], section img[src*="shrink_100"]');
-
-    // Check for loader sections (skeleton/shimmer state)
-    const loaderSections = document.querySelectorAll('section[class*="pvs-loader"]');
-    const hasLoaders = loaderSections.length > 0;
-
-    console.log(`[Social Recall] Content check: sections=${sections.length}, withContent=${sectionsWithContent}, pvsLists=${pvsLists.length}, mainChildren=${mainChildCount}, h2s=${h2WithText}, hasExp=${hasExperienceText}, name=${hasProfileName}, loaders=${loaderSections.length}`);
-
-    // Content is ready when we have:
-    // 1. Profile name loaded
-    // 2. NO loader sections (content fully loaded)
-    // 3. Main has multiple children (profile sections) OR Experience/Education text visible
-    const contentReady = hasProfileName && !hasLoaders && (
-      mainChildCount >= 4 ||  // Main has multiple profile section children
-      hasExperienceText ||  // Experience and Education text visible
-      (sectionsWithContent >= 3 && h2WithText >= 3)  // Multiple sections with content
-    );
-
-    if (contentReady) {
-      console.log('[Social Recall] Content loaded successfully');
-      return true;
-    }
-
-    // If we haven't scrolled yet and we're past 2 seconds, scroll aggressively to trigger lazy load
-    if (!scrollTriggered && Date.now() - startTime > 2000) {
-      console.log('[Social Recall] Triggering aggressive scroll to load lazy content');
-      scrollTriggered = true;
-
-      // Scroll through the entire page to trigger intersection observers
-      const scrollHeight = document.body.scrollHeight;
-      const viewportHeight = window.innerHeight;
-
-      // Scroll in chunks to trigger all lazy loads
-      for (let pos = 0; pos < scrollHeight; pos += viewportHeight) {
-        window.scrollTo(0, pos);
-        await wait(150);
-      }
-
-      // Scroll back to top
-      window.scrollTo(0, 0);
-      await wait(300);
-    }
-
-    // Second scroll attempt at 10 seconds if still no content
-    if (scrollTriggered && !hasExperienceText && Date.now() - startTime > 10000 && Date.now() - startTime < 11000) {
-      console.log('[Social Recall] Second scroll attempt');
-      window.scrollTo(0, document.body.scrollHeight / 2);
-      await wait(500);
-      window.scrollTo(0, 0);
-    }
-
-    await wait(checkInterval);
-  }
-
-  // Check if we're still in loader state - if so, wait more
-  const loaderSections = document.querySelectorAll('section[class*="pvs-loader"]');
-  if (loaderSections.length > 0) {
-    console.log(`[Social Recall] Still ${loaderSections.length} loader sections, waiting 5 more seconds...`);
-    await wait(5000);
-  }
-
-  console.log('[Social Recall] Content load timeout - proceeding anyway');
-  return false;
-}
-
-/**
  * Extract profile data from the current LinkedIn page
  * Expands all sections first, then extracts data
  */
 async function extractProfileData(profileId: string, startTime: number): Promise<Partial<StoredProfile>> {
-  // Wait for LinkedIn content to actually load
   updateProgress('expanding', startTime);
-  console.log('[Social Recall] Waiting for content to load...');
-  await waitForContentLoad();
-
-  // Expand all sections first to get full data
-  await expandAllSections();
-
-  // Wait a bit more after expansion
-  await wait(500);
 
   // Debug: Comprehensive DOM inspection
   debugLinkedInDOM();
+
+  // Expand sections (carefully, avoid navigation)
+  await expandAllSections();
+  await waitForStable(300);
 
   // Extract education
   updateProgress('education', startTime);
