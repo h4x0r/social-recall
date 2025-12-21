@@ -11,6 +11,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/hooks/use-auth";
+import { GoogleSyncButton } from "@/components/sync/google-sync-button";
+import { AddContactDialog } from "@/components/contacts/add-contact-dialog";
 
 export function Header() {
   const { user, signOut } = useAuth();
@@ -62,14 +64,22 @@ export function Header() {
           >
             Skills
           </Link>
+          <Link
+            href="/tags"
+            className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Tags
+          </Link>
         </nav>
 
         {/* Actions */}
         <div className="flex items-center gap-3">
-          <Button variant="outline" size="sm" className="hidden sm:inline-flex">
-            <PlusIcon className="mr-2 h-4 w-4" />
-            Add Contact
-          </Button>
+          <div className="hidden sm:block">
+            <GoogleSyncButton compact />
+          </div>
+          <div className="hidden sm:block">
+            <AddContactDialog />
+          </div>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -100,13 +110,17 @@ export function Header() {
                 </div>
               </div>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>
-                <SettingsIcon className="mr-2 h-4 w-4" />
-                Settings
+              <DropdownMenuItem asChild>
+                <Link href="/settings">
+                  <SettingsIcon className="mr-2 h-4 w-4" />
+                  Settings
+                </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem>
-                <SyncIcon className="mr-2 h-4 w-4" />
-                Sync Status
+              <DropdownMenuItem asChild>
+                <Link href="/sync">
+                  <SyncIcon className="mr-2 h-4 w-4" />
+                  Sync Status
+                </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem

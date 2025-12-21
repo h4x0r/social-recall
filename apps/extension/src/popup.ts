@@ -1,18 +1,16 @@
-import {
-  Employer,
-  extractProfileIdFromUrl,
-  isLinkedInProfileUrl,
-  extractProfileNameFromTitle,
-  extractFirstPartBeforeMiddleDot,
-  getCompanyInitials,
-  isDurationString,
-  isNewEmployer,
-} from './utils';
+/**
+ * Social Recall Popup - Art Deco Style
+ * Shows connection status, stats, and recent profiles
+ */
+
+import { syncAllContacts, isLoggedIn, getWebAppUrl } from './sync';
 
 interface SocialNote {
   name: string;
-  text: string;
-  employers?: Employer[];
+  text?: string;
+  headline?: string;
+  avatarUrl?: string;
+  lastSeen?: string;
 }
 
 interface SocialNotes {
@@ -21,344 +19,169 @@ interface SocialNotes {
 
 interface StorageResult {
   socialNotes?: SocialNotes;
+  syncToken?: string;
 }
 
-interface ProfileInfo {
-  name: string;
-  profileId: string;
-  url: string;
-  isLinkedInProfile: boolean;
-  employers: Employer[];
-}
+document.addEventListener('DOMContentLoaded', async (): Promise<void> => {
+  const statusDot = document.querySelector('.popup__status-dot') as HTMLElement;
+  const statusText = document.getElementById('statusText') as HTMLElement;
+  const profileCount = document.getElementById('profileCount') as HTMLElement;
+  const newCount = document.getElementById('newCount') as HTMLElement;
+  const recentList = document.getElementById('recentList') as HTMLElement;
+  const syncBtn = document.getElementById('syncBtn') as HTMLButtonElement;
+  const webAppBtn = document.getElementById('webAppBtn') as HTMLButtonElement;
 
-document.addEventListener('DOMContentLoaded', (): void => {
-  const personNameInput = document.getElementById('personName') as HTMLInputElement;
-  const notesInput = document.getElementById('notes') as HTMLTextAreaElement;
-  const saveButton = document.getElementById('saveButton') as HTMLButtonElement;
-  const notesList = document.getElementById('notesList') as HTMLElement;
+  // Check connection status
+  const connected = await isLoggedIn();
+  updateConnectionStatus(connected);
 
-  chrome.tabs.query({ active: true, currentWindow: true }, async (tabs: chrome.tabs.Tab[]): Promise<void> => {
-    const tab: chrome.tabs.Tab | undefined = tabs?.[0];
-    if (tab && tab.id) {
-      try {
-        const profileInfo: ProfileInfo = await extractProfileInfo(tab.id);
+  // Load stats and recent profiles
+  await loadStats();
+  await loadRecentProfiles();
 
-        if (profileInfo && profileInfo.isLinkedInProfile &&
-          profileInfo.name && profileInfo.name !== 'Unknown LinkedIn User' &&
-          profileInfo.profileId) {
+  // Sync button
+  syncBtn.addEventListener('click', async () => {
+    if (!connected) {
+      // Open web app for login
+      const webAppUrl = await getWebAppUrl();
+      chrome.tabs.create({ url: `${webAppUrl}/auth/extension` });
+      return;
+    }
 
-          saveButton.disabled = false;
-          personNameInput.disabled = false;
-          notesInput.disabled = false;
+    syncBtn.disabled = true;
+    syncBtn.innerHTML = '<span class="popup__btn-icon">↻</span> Syncing...';
 
-          saveButton.dataset.profileId = profileInfo.profileId;
+    const result = await syncAllContacts();
 
-          if (profileInfo.employers && profileInfo.employers.length > 0) {
-            saveButton.dataset.employers = JSON.stringify(profileInfo.employers);
-            displayCompanyLogos(profileInfo.employers);
-          } else {
-            saveButton.dataset.employers = '[]';
-            const logosContainer = document.getElementById('companyLogosContainer') as HTMLElement;
-            logosContainer.innerHTML = '';
-          }
-
-          personNameInput.value = profileInfo.name;
-          loadNoteForProfileId(profileInfo.profileId);
-        } else {
-          showDefaultView();
-        }
-      } catch (error) {
-        console.error('Error extracting profile info:', error);
-        showDefaultView();
-      }
+    if (result.success) {
+      syncBtn.innerHTML = '<span class="popup__btn-icon">✓</span> Synced!';
+      setTimeout(() => {
+        syncBtn.disabled = false;
+        syncBtn.innerHTML = '<span class="popup__btn-icon">↻</span> Sync Now';
+      }, 2000);
     } else {
-      showDefaultView();
+      syncBtn.innerHTML = '<span class="popup__btn-icon">✕</span> Failed';
+      setTimeout(() => {
+        syncBtn.disabled = false;
+        syncBtn.innerHTML = '<span class="popup__btn-icon">↻</span> Sync Now';
+      }, 2000);
     }
   });
 
-  saveButton.addEventListener('click', (): void => {
-    const name: string = personNameInput.value.trim();
-    const note: string = notesInput.value.trim();
-    const profileId: string | undefined = saveButton.dataset.profileId;
-    const employers: Employer[] = JSON.parse(saveButton.dataset.employers || '[]');
-
-    if (!profileId) return;
-
-    console.log('Saving data for profile:', profileId, 'Name:', name);
-
-    chrome.storage.sync.get(['socialNotes'], (result: StorageResult): void => {
-      const notes: SocialNotes = result.socialNotes || {};
-
-      notes[profileId] = {
-        name: name,
-        text: note,
-        employers: employers
-      };
-
-      console.log('Profile data saved:', notes[profileId]);
-
-      chrome.storage.sync.set({ socialNotes: notes }, (): void => {
-        console.log('Information saved successfully');
-      });
-    });
+  // Web app button
+  webAppBtn.addEventListener('click', async () => {
+    const webAppUrl = await getWebAppUrl();
+    chrome.tabs.create({ url: webAppUrl });
   });
 
-  async function extractProfileInfo(tabId: number): Promise<ProfileInfo> {
-    const results: any[] = await chrome.scripting.executeScript({
-      target: { tabId: tabId },
-      func: () => {
-        function extractProfileId(): string | null {
-          const urlRegex = /linkedin\.com\/in\/([^/]+)/;
-          const urlMatch = urlRegex.exec(window.location.href);
-          if (urlMatch) return urlMatch[1];
-
-          const metaProfile = document.querySelector('meta[name="profile-id"]') as HTMLMetaElement;
-          return metaProfile?.content || null;
-        }
-
-        function extractProfileName(): string {
-          const title: string = document.title;
-          if (title) {
-            const titleParts: string[] = title.split(/\s[\|\-]\s|\s\||\s\-\s/);
-            if (titleParts.length > 0 && titleParts[0].trim()) {
-              return titleParts[0].trim();
-            }
-          }
-
-          const metaTitle = document.querySelector('meta[property="og:title"]') as HTMLMetaElement;
-          if (metaTitle?.content) {
-            const metaTitleParts: string[] = metaTitle.content.split(/\s[\|\-]\s|\s\||\s\-\s/);
-            if (metaTitleParts.length > 0 && metaTitleParts[0].trim()) {
-              return metaTitleParts[0].trim();
-            }
-          }
-
-          return 'Unknown LinkedIn User';
-        }
-
-        function extractEmployers(): Employer[] {
-          const employers: Employer[] = [];
-
-          try {
-            console.log('Looking for Experience section');
-
-            const experienceHeaders: Element[] = Array.from(document.querySelectorAll('h2, section h1, .pv-profile-section__header-text, .pvs-header__title'))
-              .filter((el: Element) => (el.textContent || '').trim().toLowerCase().includes('experience'));
-
-            if (experienceHeaders.length > 0) {
-              console.log('Found Experience section');
-
-              const header: Element = experienceHeaders[0];
-              let section: Element | null = header.closest('section') || header.parentElement;
-
-              if (section) {
-                console.log('Looking for company logos within Experience section');
-
-                const experienceItems: NodeListOf<Element> = section.querySelectorAll('li, .pvs-entity, .pv-entity, .profile-section-card');
-
-                for (let i = 0; i < experienceItems.length; i++) {
-                  const item = experienceItems[i];
-                  const logoImg = item.querySelector('img[width="48"], img[height="48"], .ivm-view-attr__ghost-entity') as HTMLImageElement;
-
-                  if (logoImg) {
-                    console.log(`Found potential company logo image: ${logoImg.src || 'no src'}`);
-
-                    function extractCommentTextFromSpans(spans: NodeListOf<Element>): string | null {
-                      for (let j = 0; j < spans.length; j++) {
-                        const span = spans[j];
-                        const html: string = (span as HTMLElement).innerHTML;
-                        const commentPattern = /<!---->([^<>]+)<!---->/;
-                        const match = html.match(commentPattern);
-                        if (match) return match[1].trim();
-                      }
-                      return null;
-                    }
-
-                    function extractFirstPartBeforeMiddleDot(string: string): string {
-                      let dotIndex: number = string.indexOf(' ' + String.fromCharCode(0xB7) + ' ');
-
-                      if (dotIndex !== -1) {
-                        string = string.substring(0, dotIndex).trim();
-                      }
-
-                      return string;
-                    }
-
-                    const commentText1: string | null = extractCommentTextFromSpans(item.querySelectorAll('span[aria-hidden="true"]'));
-                    if (commentText1) {
-                      console.log(`Found first line after logo in aria-hidden span: "${commentText1}"`);
-                    }
-                    let companyName: string | null = commentText1;
-
-                    const commentText2: string | null = extractCommentTextFromSpans(item.querySelectorAll('.t-14.t-normal'));
-                    if (commentText2) {
-                      console.log(`Found second line after logo in aria-hidden span: "${commentText2}"`);
-                    }
-                    if (commentText2 && !commentText2.match('[0-9] mo')) {
-                      companyName = extractFirstPartBeforeMiddleDot(commentText2);
-                    }
-
-                    if (!companyName) continue;
-
-                    const logoUrl: string = logoImg.src || '';
-
-                    employers.push({
-                      company: companyName,
-                      logo: logoUrl
-                    });
-                  }
-                }
-              }
-            }
-
-            console.log(`Found ${employers.length} employers`);
-            employers.forEach((emp: Employer, i: number): void => {
-              console.log(`Employer ${i + 1}: ${emp.company}${emp.logo ? ' (has logo URL)' : ''}`);
-            });
-
-          } catch (e) {
-            console.error('Error extracting employers:', e);
-          }
-
-          return employers;
-        }
-
-        const profileRegex = /linkedin\.com\/in\/([^/]+)/;
-        const isLinkedInProfile = profileRegex.exec(window.location.href);
-
-        return {
-          name: extractProfileName(),
-          profileId: extractProfileId() || '',
-          url: window.location.href,
-          isLinkedInProfile: !!isLinkedInProfile,
-          employers: extractEmployers()
-        };
-      }
-    });
-
-    if (results && results[0] && results[0].result) {
-      return results[0].result as ProfileInfo;
+  function updateConnectionStatus(isConnected: boolean): void {
+    if (isConnected) {
+      statusDot.classList.add('popup__status-dot--connected');
+      statusText.textContent = 'Connected to Social Recall';
+      statusText.classList.add('popup__status-text--connected');
+      syncBtn.innerHTML = '<span class="popup__btn-icon">↻</span> Sync Now';
+    } else {
+      statusDot.classList.add('popup__status-dot--disconnected');
+      statusText.textContent = 'Not connected';
+      syncBtn.innerHTML = '<span class="popup__btn-icon">→</span> Connect';
     }
-
-    throw new Error('Failed to extract profile info');
   }
 
-  function loadNoteForProfileId(profileId: string): void {
-    chrome.storage.sync.get(['socialNotes'], (result: StorageResult): void => {
-      const allNotes: SocialNotes = result.socialNotes || {};
-      const profileNote: SocialNote | undefined = allNotes[profileId];
+  async function loadStats(): Promise<void> {
+    return new Promise((resolve) => {
+      chrome.storage.sync.get(['socialNotes'], (result: StorageResult) => {
+        const notes = result.socialNotes || {};
+        const profiles = Object.keys(notes);
+        const total = profiles.length;
 
-      if (profileNote?.text) {
-        notesInput.value = profileNote.text;
+        // Count profiles seen in last 7 days
+        const oneWeekAgo = new Date();
+        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
-        if (profileNote.name && personNameInput.value !== profileNote.name) {
-          personNameInput.value = profileNote.name;
-        }
-      } else {
-        notesInput.value = '';
-      }
-    });
-  }
-
-  function displayCompanyLogos(employers: Employer[]): void {
-    const logosContainer = document.getElementById('companyLogosContainer') as HTMLElement;
-    logosContainer.innerHTML = '';
-
-    if (!employers || employers.length === 0) return;
-
-    const profileId: string | undefined = saveButton.dataset.profileId;
-
-    chrome.storage.sync.get(['socialNotes'], (result: StorageResult): void => {
-      const socialNotes: SocialNotes = result.socialNotes || {};
-      const savedProfile: SocialNote | undefined = socialNotes[profileId!];
-      const savedEmployers: Employer[] = savedProfile?.employers || [];
-      const savedCompanyNames: string[] = savedEmployers.map((e: Employer) => e.company.toLowerCase());
-
-      const isFirstVisit: boolean = !savedProfile;
-
-      console.log('Saved employers:', savedCompanyNames);
-      console.log('Current employers:', employers.map((e: Employer) => e.company));
-      console.log('Is first visit:', isFirstVisit);
-
-      employers.forEach((employer: Employer): void => {
-        if (employer.company) {
-          const logoWrapper: HTMLDivElement = document.createElement('div');
-          logoWrapper.className = 'company-logo-wrapper';
-
-          const employerIsNew: boolean = isNewEmployer(employer, savedEmployers, isFirstVisit);
-
-          if (employerIsNew) {
-            console.log(`New employer found: ${employer.company}`);
-            const newIndicator: HTMLDivElement = document.createElement('div');
-            newIndicator.className = 'company-logo-new';
-            logoWrapper.appendChild(newIndicator);
+        let thisWeek = 0;
+        profiles.forEach((id) => {
+          const note = notes[id];
+          if (note.lastSeen) {
+            const lastSeen = new Date(note.lastSeen);
+            if (lastSeen >= oneWeekAgo) {
+              thisWeek++;
+            }
           }
+        });
 
-          if (employer.logo) {
-            const logoImg: HTMLImageElement = document.createElement('img');
-            logoImg.className = 'company-logo';
-            logoImg.alt = employer.company;
-
-            logoImg.onerror = function (): void {
-              this.style.display = 'none';
-              createInitialsPlaceholder(logoWrapper, employer.company);
-            };
-
-            logoImg.src = employer.logo;
-            logoWrapper.appendChild(logoImg);
-          } else {
-            createInitialsPlaceholder(logoWrapper, employer.company);
-          }
-
-          const tooltip: HTMLSpanElement = document.createElement('span');
-          tooltip.className = 'company-logo-tooltip';
-          tooltip.textContent = employer.company + (employerIsNew ? ' (New)' : '');
-          logoWrapper.appendChild(tooltip);
-
-          logosContainer.appendChild(logoWrapper);
-        }
+        profileCount.textContent = total.toString();
+        newCount.textContent = thisWeek.toString();
+        resolve();
       });
-
-      if (logosContainer.children.length > 0) {
-        logosContainer.style.display = 'flex';
-      } else {
-        logosContainer.style.display = 'none';
-      }
     });
   }
 
-  function createInitialsPlaceholder(container: HTMLElement, companyName: string): void {
-    const logoPlaceholder: HTMLDivElement = document.createElement('div');
-    logoPlaceholder.className = 'company-logo';
-    logoPlaceholder.style.display = 'flex';
-    logoPlaceholder.style.justifyContent = 'center';
-    logoPlaceholder.style.alignItems = 'center';
-    logoPlaceholder.style.backgroundColor = '#f3f6f8';
-    logoPlaceholder.style.color = '#0077b5';
-    logoPlaceholder.style.fontWeight = 'bold';
-    logoPlaceholder.style.fontSize = '12px';
+  async function loadRecentProfiles(): Promise<void> {
+    return new Promise((resolve) => {
+      chrome.storage.sync.get(['socialNotes'], (result: StorageResult) => {
+        const notes = result.socialNotes || {};
+        const profiles = Object.entries(notes);
 
-    logoPlaceholder.textContent = getCompanyInitials(companyName);
-    container.appendChild(logoPlaceholder);
+        // Sort by lastSeen, most recent first
+        profiles.sort((a, b) => {
+          const aTime = a[1].lastSeen ? new Date(a[1].lastSeen).getTime() : 0;
+          const bTime = b[1].lastSeen ? new Date(b[1].lastSeen).getTime() : 0;
+          return bTime - aTime;
+        });
+
+        // Take top 5
+        const recent = profiles.slice(0, 5);
+
+        if (recent.length === 0) {
+          recentList.innerHTML = `
+            <div class="popup__recent-empty">
+              <p>No profiles yet</p>
+              <p style="margin-top: 4px; opacity: 0.7;">Visit LinkedIn to start tracking</p>
+            </div>
+          `;
+          resolve();
+          return;
+        }
+
+        recentList.innerHTML = recent
+          .map(([profileId, note]) => {
+            const initials = getInitials(note.name);
+            const avatarHtml = note.avatarUrl
+              ? `<img src="${note.avatarUrl}" alt="${note.name}">`
+              : initials;
+
+            return `
+              <div class="popup__recent-item" data-profile-id="${profileId}">
+                <div class="popup__recent-avatar">${avatarHtml}</div>
+                <div class="popup__recent-info">
+                  <div class="popup__recent-name">${note.name}</div>
+                  <div class="popup__recent-meta">${note.headline || 'LinkedIn'}</div>
+                </div>
+              </div>
+            `;
+          })
+          .join('');
+
+        // Add click handlers to open LinkedIn profiles
+        recentList.querySelectorAll('.popup__recent-item').forEach((item) => {
+          item.addEventListener('click', () => {
+            const profileId = item.getAttribute('data-profile-id');
+            if (profileId) {
+              chrome.tabs.create({ url: `https://linkedin.com/in/${profileId}` });
+            }
+          });
+        });
+
+        resolve();
+      });
+    });
   }
 
-  function showDefaultView(): void {
-    saveButton.disabled = true;
-    notesInput.value = '';
-    personNameInput.value = '';
-
-    delete saveButton.dataset.profileId;
-    delete saveButton.dataset.employers;
-
-    notesList.innerHTML = '';
-
-    const logosContainer = document.getElementById('companyLogosContainer') as HTMLElement;
-    logosContainer.innerHTML = '';
-    logosContainer.style.display = 'none';
-
-    notesInput.placeholder = 'Visit a LinkedIn profile to add notes...';
-
-    personNameInput.disabled = true;
-    notesInput.disabled = true;
+  function getInitials(name: string): string {
+    const parts = name.split(' ');
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
   }
 });

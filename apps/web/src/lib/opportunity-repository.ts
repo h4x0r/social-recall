@@ -2,9 +2,10 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, DbOpportunity, DbContact } from './database.types';
-import type { OpportunityType } from './opportunities';
+import type { OpportunityType, Contact as DetectionContact } from './opportunities';
+import { detectOpportunities } from './opportunities';
 
-export interface OpportunityContact {
+export interface OpportunityContactDisplay {
   id: string;
   name: string;
   headline: string | null;
@@ -18,7 +19,21 @@ export interface Opportunity {
   detectedAt: string;
   dismissed: boolean;
   snoozedUntil: string | null;
-  contact: OpportunityContact;
+  contact: OpportunityContactDisplay;
+}
+
+export interface CreateOpportunityInput {
+  contactId: string;
+  type: OpportunityType;
+  description: string;
+}
+
+export interface CreatedOpportunity {
+  id: string;
+  contactId: string;
+  type: OpportunityType;
+  description: string;
+  detectedAt: string;
 }
 
 export interface ListOpportunitiesOptions {
@@ -32,6 +47,8 @@ export interface OpportunityRepository {
   listOpportunities(userId: string, options?: ListOpportunitiesOptions): Promise<Opportunity[]>;
   dismissOpportunity(opportunityId: string): Promise<void>;
   snoozeOpportunity(opportunityId: string, days: number): Promise<void>;
+  createOpportunity(input: CreateOpportunityInput): Promise<CreatedOpportunity>;
+  detectAndCreateOpportunities(before: DetectionContact, after: DetectionContact): Promise<CreatedOpportunity[]>;
 }
 
 // Type for the joined query result
@@ -133,6 +150,55 @@ export function createOpportunityRepository(
       if (error) {
         throw new Error(`Failed to snooze opportunity: ${error.message}`);
       }
+    },
+
+    async createOpportunity(input: CreateOpportunityInput): Promise<CreatedOpportunity> {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from('opportunities')
+        .insert({
+          contact_id: input.contactId,
+          type: input.type,
+          description: input.description,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        throw new Error(`Failed to create opportunity: ${error.message}`);
+      }
+
+      return {
+        id: data.id,
+        contactId: data.contact_id,
+        type: data.type as OpportunityType,
+        description: data.description,
+        detectedAt: data.detected_at,
+      };
+    },
+
+    async detectAndCreateOpportunities(
+      before: DetectionContact,
+      after: DetectionContact
+    ): Promise<CreatedOpportunity[]> {
+      const detectedOpportunities = detectOpportunities(before, after);
+
+      if (detectedOpportunities.length === 0) {
+        return [];
+      }
+
+      const createdOpportunities: CreatedOpportunity[] = [];
+
+      for (const opportunity of detectedOpportunities) {
+        const created = await this.createOpportunity({
+          contactId: after.id,
+          type: opportunity.type,
+          description: opportunity.description,
+        });
+        createdOpportunities.push(created);
+      }
+
+      return createdOpportunities;
     },
   };
 }

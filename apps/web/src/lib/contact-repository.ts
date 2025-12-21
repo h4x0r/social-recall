@@ -135,6 +135,9 @@ export interface ContactUpdateInput {
 export interface ListContactsOptions {
   isNew?: boolean;
   search?: string;
+  skill?: string;
+  note?: string;
+  tag?: string;
   limit?: number;
   offset?: number;
 }
@@ -227,10 +230,33 @@ function transformRelationship(
   };
 }
 
+// Lighter-weight version of ContactWithRelations for list views
+// Simplified tag type for list view
+export interface ContactTag {
+  id: string;
+  name: string;
+  color: string;
+}
+
+export interface ContactWithEmployersAndSkills extends Contact {
+  employers: Employer[];
+  skills: Skill[];
+  tags: ContactTag[];
+}
+
+export interface ListContactsWithRelationsOptions {
+  limit?: number;
+  search?: string;
+  skill?: string;
+  note?: string;
+  tag?: string;
+}
+
 export interface ContactRepository {
   createContact(input: ContactInput): Promise<Contact>;
   getContact(id: string): Promise<ContactWithRelations | null>;
   listContacts(userId: string, options?: ListContactsOptions): Promise<Contact[]>;
+  listContactsWithRelations(userId: string, options?: ListContactsWithRelationsOptions): Promise<ContactWithEmployersAndSkills[]>;
   updateContact(id: string, input: ContactUpdateInput): Promise<Contact>;
   deleteContact(id: string): Promise<void>;
   markContactAsSeen(id: string): Promise<void>;
@@ -253,6 +279,9 @@ export interface ContactRepository {
   updateRelationship(id: string, input: Partial<RelationshipInput>): Promise<Relationship>;
   deleteRelationship(id: string): Promise<void>;
   getRelationship(contactId: string): Promise<Relationship | null>;
+
+  // Count methods
+  countContacts(userId: string): Promise<{ total: number; new: number }>;
 }
 
 export function createContactRepository(
@@ -342,6 +371,98 @@ export function createContactRepository(
       userId: string,
       options?: ListContactsOptions
     ): Promise<Contact[]> {
+      // If skill search is specified, first get contact IDs with matching skills
+      if (options?.skill) {
+        const skillPattern = `%${options.skill}%`;
+        const { data: skillData, error: skillError } = await supabase
+          .from('contact_skills')
+          .select('contact_id')
+          .ilike('name', skillPattern);
+
+        if (skillError) throw new Error(skillError.message);
+        if (!skillData || skillData.length === 0) return [];
+
+        const contactIds = [...new Set(skillData.map((s) => s.contact_id))];
+
+        // Now get contacts with those IDs
+        let query = supabase
+          .from('contacts')
+          .select('*')
+          .eq('user_id', userId)
+          .in('id', contactIds)
+          .order('updated_at', { ascending: false });
+
+        if (options?.limit) {
+          query = query.limit(options.limit);
+        }
+
+        const { data, error } = await query;
+        if (error) throw new Error(error.message);
+        return (data || []).map(transformContact);
+      }
+
+      // If note search is specified, first get contact IDs with matching notes
+      if (options?.note) {
+        const notePattern = `%${options.note}%`;
+        const { data: noteData, error: noteError } = await supabase
+          .from('contact_notes')
+          .select('contact_id')
+          .ilike('content', notePattern);
+
+        if (noteError) throw new Error(noteError.message);
+        if (!noteData || noteData.length === 0) return [];
+
+        const contactIds = [...new Set(noteData.map((n) => n.contact_id))];
+
+        // Now get contacts with those IDs
+        let query = supabase
+          .from('contacts')
+          .select('*')
+          .eq('user_id', userId)
+          .in('id', contactIds)
+          .order('updated_at', { ascending: false });
+
+        if (options?.limit) {
+          query = query.limit(options.limit);
+        }
+
+        const { data, error } = await query;
+        if (error) throw new Error(error.message);
+        return (data || []).map(transformContact);
+      }
+
+      // Search by tag name
+      if (options?.tag) {
+        const tagPattern = `%${options.tag}%`;
+        // First find tags with matching names, then get associated contact IDs
+        const { data: tagData, error: tagError } = await supabase
+          .from('contact_tags')
+          .select('contact_id, tags!inner(name)')
+          .eq('tags.user_id', userId)
+          .ilike('tags.name', tagPattern);
+
+        if (tagError) throw new Error(tagError.message);
+        if (!tagData || tagData.length === 0) return [];
+
+        const contactIds = [...new Set(tagData.map((t) => t.contact_id))];
+
+        // Now get contacts with those IDs
+        let query = supabase
+          .from('contacts')
+          .select('*')
+          .eq('user_id', userId)
+          .in('id', contactIds)
+          .order('updated_at', { ascending: false });
+
+        if (options?.limit) {
+          query = query.limit(options.limit);
+        }
+
+        const { data, error } = await query;
+        if (error) throw new Error(error.message);
+        return (data || []).map(transformContact);
+      }
+
       let query = supabase
         .from('contacts')
         .select('*')
@@ -371,6 +492,179 @@ export function createContactRepository(
       if (error) throw new Error(error.message);
 
       return (data || []).map(transformContact);
+    },
+
+    async listContactsWithRelations(
+      userId: string,
+      options?: ListContactsWithRelationsOptions
+    ): Promise<ContactWithEmployersAndSkills[]> {
+      const limit = options?.limit ?? 50;
+
+      // If skill search is specified, first get contact IDs with matching skills
+      if (options?.skill) {
+        const skillPattern = `%${options.skill}%`;
+        const { data: skillData, error: skillError } = await supabase
+          .from('contact_skills')
+          .select('contact_id')
+          .ilike('name', skillPattern);
+
+        if (skillError) throw new Error(skillError.message);
+        if (!skillData || skillData.length === 0) return [];
+
+        const contactIds = [...new Set(skillData.map((s) => s.contact_id))];
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data, error } = await (supabase as any)
+          .from('contacts')
+          .select(`
+            *,
+            employers:contact_employers(*),
+            skills:contact_skills(*),
+            tags:contact_tags(tag_id, tags(*))
+          `)
+          .eq('user_id', userId)
+          .in('id', contactIds)
+          .order('updated_at', { ascending: false })
+          .limit(limit);
+
+        if (error) throw new Error(error.message);
+
+        return (data || []).map((row: DbContact & { employers: DbContactEmployer[]; skills: DbContactSkill[]; tags: Array<{ tags: { id: string; name: string; color: string } }> }) => ({
+          ...transformContact(row),
+          employers: (row.employers || []).map(transformEmployer),
+          skills: (row.skills || [])
+            .filter((s: DbContactSkill) => s.status === 'confirmed')
+            .map(transformSkill),
+          tags: (row.tags || []).map((t) => ({
+            id: t.tags.id,
+            name: t.tags.name,
+            color: t.tags.color,
+          })),
+        }));
+      }
+
+      // If note search is specified, first get contact IDs with matching notes
+      if (options?.note) {
+        const notePattern = `%${options.note}%`;
+        const { data: noteData, error: noteError } = await supabase
+          .from('contact_notes')
+          .select('contact_id')
+          .ilike('content', notePattern);
+
+        if (noteError) throw new Error(noteError.message);
+        if (!noteData || noteData.length === 0) return [];
+
+        const contactIds = [...new Set(noteData.map((n) => n.contact_id))];
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data, error } = await (supabase as any)
+          .from('contacts')
+          .select(`
+            *,
+            employers:contact_employers(*),
+            skills:contact_skills(*),
+            tags:contact_tags(tag_id, tags(*))
+          `)
+          .eq('user_id', userId)
+          .in('id', contactIds)
+          .order('updated_at', { ascending: false })
+          .limit(limit);
+
+        if (error) throw new Error(error.message);
+
+        return (data || []).map((row: DbContact & { employers: DbContactEmployer[]; skills: DbContactSkill[]; tags: Array<{ tags: { id: string; name: string; color: string } }> }) => ({
+          ...transformContact(row),
+          employers: (row.employers || []).map(transformEmployer),
+          skills: (row.skills || [])
+            .filter((s: DbContactSkill) => s.status === 'confirmed')
+            .map(transformSkill),
+          tags: (row.tags || []).map((t) => ({
+            id: t.tags.id,
+            name: t.tags.name,
+            color: t.tags.color,
+          })),
+        }));
+      }
+
+      // If tag search is specified, first get contact IDs with matching tags
+      if (options?.tag) {
+        const tagPattern = `%${options.tag}%`;
+        const { data: tagData, error: tagError } = await supabase
+          .from('contact_tags')
+          .select('contact_id, tags!inner(name)')
+          .eq('tags.user_id', userId)
+          .ilike('tags.name', tagPattern);
+
+        if (tagError) throw new Error(tagError.message);
+        if (!tagData || tagData.length === 0) return [];
+
+        const contactIds = [...new Set(tagData.map((t) => t.contact_id))];
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data, error } = await (supabase as any)
+          .from('contacts')
+          .select(`
+            *,
+            employers:contact_employers(*),
+            skills:contact_skills(*),
+            tags:contact_tags(tag_id, tags(*))
+          `)
+          .eq('user_id', userId)
+          .in('id', contactIds)
+          .order('updated_at', { ascending: false })
+          .limit(limit);
+
+        if (error) throw new Error(error.message);
+
+        return (data || []).map((row: DbContact & { employers: DbContactEmployer[]; skills: DbContactSkill[]; tags: Array<{ tags: { id: string; name: string; color: string } }> }) => ({
+          ...transformContact(row),
+          employers: (row.employers || []).map(transformEmployer),
+          skills: (row.skills || [])
+            .filter((s: DbContactSkill) => s.status === 'confirmed')
+            .map(transformSkill),
+          tags: (row.tags || []).map((t) => ({
+            id: t.tags.id,
+            name: t.tags.name,
+            color: t.tags.color,
+          })),
+        }));
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let query = (supabase as any)
+        .from('contacts')
+        .select(`
+          *,
+          employers:contact_employers(*),
+          skills:contact_skills(*),
+          tags:contact_tags(tag_id, tags(*))
+        `)
+        .eq('user_id', userId)
+        .order('updated_at', { ascending: false });
+
+      // Search by name or headline
+      if (options?.search) {
+        const searchPattern = `%${options.search}%`;
+        query = query.or(`name.ilike.${searchPattern},headline.ilike.${searchPattern}`);
+      }
+
+      const { data, error } = await query.limit(limit);
+
+      if (error) throw new Error(error.message);
+
+      // Transform and filter skills to only include confirmed
+      return (data || []).map((row: DbContact & { employers: DbContactEmployer[]; skills: DbContactSkill[]; tags: Array<{ tags: { id: string; name: string; color: string } }> }) => ({
+        ...transformContact(row),
+        employers: (row.employers || []).map(transformEmployer),
+        skills: (row.skills || [])
+          .filter((s: DbContactSkill) => s.status === 'confirmed')
+          .map(transformSkill),
+        tags: (row.tags || []).map((t) => ({
+          id: t.tags.id,
+          name: t.tags.name,
+          color: t.tags.color,
+        })),
+      }));
     },
 
     async updateContact(id: string, input: ContactUpdateInput): Promise<Contact> {
@@ -709,6 +1003,30 @@ export function createContactRepository(
       }
 
       return transformRelationship(data, introducedByName);
+    },
+
+    async countContacts(userId: string): Promise<{ total: number; new: number }> {
+      // Get total count
+      const { count: totalCount, error: totalError } = await supabase
+        .from('contacts')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId);
+
+      // Get new count
+      const { count: newCount, error: newError } = await supabase
+        .from('contacts')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('is_new', true);
+
+      if (totalError || newError) {
+        return { total: 0, new: 0 };
+      }
+
+      return {
+        total: totalCount ?? 0,
+        new: newCount ?? 0,
+      };
     },
   };
 }

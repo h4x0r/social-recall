@@ -9,6 +9,7 @@ import { useSkillInference } from "@/hooks/use-skill-inference";
 import { useContacts } from "@/hooks/use-contacts";
 import { ContactDetail } from "./contact-detail";
 import { Sparkles, Loader2, RefreshCw, Users } from "lucide-react";
+import type { ContactWithEmployersAndSkills } from "@/lib/contact-repository";
 
 // Contact type for display (combines DB data with computed fields)
 interface DisplayContact {
@@ -17,6 +18,7 @@ interface DisplayContact {
   headline: string | null;
   employers: { company: string; logo: string }[];
   skills: string[];
+  tags: { id: string; name: string; color: string }[];
   lastUpdated: string;
   isNew: boolean;
 }
@@ -38,20 +40,35 @@ function formatRelativeTime(dateString: string): string {
 
 interface ContactListProps {
   search?: string;
+  skill?: string;
+  note?: string;
+  tag?: string;
+  showHeader?: boolean;
 }
 
-export function ContactList({ search }: ContactListProps = {}) {
-  const { contacts, isLoading, error, totalCount, refresh } = useContacts({ search });
+export function ContactList({ search, skill, note, tag, showHeader = false }: ContactListProps = {}) {
+  // Use withRelations to get employers and skills in a single query
+  const { contacts, isLoading, error, totalCount, newCount, refresh } = useContacts({
+    search,
+    skill,
+    note,
+    tag,
+    withRelations: true
+  });
   const [selectedContact, setSelectedContact] = useState<DisplayContact | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
 
   // Transform DB contacts to display format
-  const displayContacts: DisplayContact[] = contacts.map((c) => ({
+  const displayContacts: DisplayContact[] = (contacts as ContactWithEmployersAndSkills[]).map((c) => ({
     id: c.id,
     name: c.name,
     headline: c.headline,
-    employers: [], // TODO: Fetch employers separately or join in query
-    skills: [], // TODO: Fetch skills separately
+    employers: (c.employers || []).map((e) => ({
+      company: e.company,
+      logo: e.logoUrl || '',
+    })),
+    skills: (c.skills || []).map((s) => s.name),
+    tags: c.tags || [],
     lastUpdated: formatRelativeTime(c.updatedAt),
     isNew: c.isNew,
   }));
@@ -109,6 +126,17 @@ export function ContactList({ search }: ContactListProps = {}) {
 
   return (
     <>
+      {showHeader && (
+        <div className="mb-6 flex items-center justify-between">
+          <h2 className="font-display text-2xl">Recent Contacts</h2>
+          <span className="font-data text-sm text-muted-foreground">
+            {totalCount.toLocaleString()} total
+            {newCount > 0 && (
+              <span className="ml-2 text-primary">({newCount} new)</span>
+            )}
+          </span>
+        </div>
+      )}
       <div className="space-y-3">
         {displayContacts.map((contact, index) => (
           <ContactCard
@@ -199,6 +227,27 @@ function ContactCard({ contact, className, onClick }: ContactCardProps) {
             {contact.headline}
           </p>
         </div>
+
+        {/* Tags */}
+        {contact.tags.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
+            {contact.tags.slice(0, 3).map((tag) => (
+              <Badge
+                key={tag.id}
+                variant="outline"
+                className="text-xs font-normal"
+                style={{ borderColor: tag.color, color: tag.color }}
+              >
+                {tag.name}
+              </Badge>
+            ))}
+            {contact.tags.length > 3 && (
+              <Badge variant="outline" className="text-xs font-normal">
+                +{contact.tags.length - 3}
+              </Badge>
+            )}
+          </div>
+        )}
 
         {/* Skills */}
         <div className="flex flex-wrap items-center gap-1.5">

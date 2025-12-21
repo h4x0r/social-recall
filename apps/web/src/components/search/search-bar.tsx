@@ -52,21 +52,21 @@ export function SearchBar({ value, onChange, onHintClick }: SearchBarProps) {
 
       {/* Search hints */}
       <div className="mt-3 flex flex-wrap gap-2">
-        <SearchHint label="Security experts" onClick={() => {
-          setQuery("Security experts");
-          onHintClick?.("Security experts");
+        <SearchHint label="skill:React" onClick={() => {
+          setQuery("skill:React");
+          onHintClick?.("skill:React");
         }} />
-        <SearchHint label="Ex-Google" onClick={() => {
-          setQuery("Ex-Google");
-          onHintClick?.("Ex-Google");
+        <SearchHint label="skill:Python" onClick={() => {
+          setQuery("skill:Python");
+          onHintClick?.("skill:Python");
         }} />
-        <SearchHint label="Founders" onClick={() => {
-          setQuery("Founders");
-          onHintClick?.("Founders");
+        <SearchHint label="note:follow up" onClick={() => {
+          setQuery("note:follow up");
+          onHintClick?.("note:follow up");
         }} />
-        <SearchHint label="Investors" onClick={() => {
-          setQuery("Investors");
-          onHintClick?.("Investors");
+        <SearchHint label="tag:VIP" onClick={() => {
+          setQuery("tag:VIP");
+          onHintClick?.("tag:VIP");
         }} />
       </div>
     </div>

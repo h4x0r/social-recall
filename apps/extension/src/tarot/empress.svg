@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 144">
+  <defs>
+    <linearGradient id="empress-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a1a"/>
+      <stop offset="100%" style="stop-color:#2a2a2a"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Card background -->
+  <rect width="96" height="144" rx="4" fill="url(#empress-bg)"/>
+  <rect x="2" y="2" width="92" height="140" rx="3" fill="none" stroke="#c9a227" stroke-width="1.5"/>
+
+  <!-- Art deco corner decorations -->
+  <path d="M8 8 L20 8 L20 12 L12 12 L12 20 L8 20 Z" fill="#c9a227" opacity="0.6"/>
+  <path d="M88 8 L76 8 L76 12 L84 12 L84 20 L88 20 Z" fill="#c9a227" opacity="0.6"/>
+  <path d="M8 136 L20 136 L20 132 L12 132 L12 124 L8 124 Z" fill="#c9a227" opacity="0.6"/>
+  <path d="M88 136 L76 136 L76 132 L84 132 L84 124 L88 124 Z" fill="#c9a227" opacity="0.6"/>
+
+  <!-- Venus symbol at top -->
+  <circle cx="48" cy="22" r="6" fill="none" stroke="#c9a227" stroke-width="1.5"/>
+  <line x1="48" y1="28" x2="48" y2="36" stroke="#c9a227" stroke-width="1.5"/>
+  <line x1="44" y1="32" x2="52" y2="32" stroke="#c9a227" stroke-width="1.5"/>
+
+  <!-- Stars around head (crown of 12 stars simplified to 6) -->
+  <polygon points="30,42 31,44 33,44 31.5,45.5 32,48 30,46.5 28,48 28.5,45.5 27,44 29,44" fill="#c9a227"/>
+  <polygon points="38,38 39,40 41,40 39.5,41.5 40,44 38,42.5 36,44 36.5,41.5 35,40 37,40" fill="#c9a227"/>
+  <polygon points="58,38 59,40 61,40 59.5,41.5 60,44 58,42.5 56,44 56.5,41.5 55,40 57,40" fill="#c9a227"/>
+  <polygon points="66,42 67,44 69,44 67.5,45.5 68,48 66,46.5 64,48 64.5,45.5 63,44 65,44" fill="#c9a227"/>
+
+  <!-- Empress figure -->
+  <circle cx="48" cy="52" r="7" fill="none" stroke="#f5f2eb" stroke-width="1.5"/>
+
+  <!-- Crown/tiara -->
+  <path d="M41 46 L44 48 L48 44 L52 48 L55 46" fill="none" stroke="#c9a227" stroke-width="1.5"/>
+
+  <!-- Flowing robe/gown -->
+  <path d="M36 58 L48 56 L60 58 L68 100 L48 105 L28 100 Z" fill="none" stroke="#f5f2eb" stroke-width="1.5"/>
+
+  <!-- Decorative pattern on gown - pomegranates -->
+  <circle cx="42" cy="75" r="3" fill="none" stroke="#c9a227" stroke-width="1"/>
+  <circle cx="54" cy="80" r="3" fill="none" stroke="#c9a227" stroke-width="1"/>
+  <circle cx="45" cy="92" r="3" fill="none" stroke="#c9a227" stroke-width="1"/>
+
+  <!-- Scepter -->
+  <line x1="62" y1="62" x2="75" y2="52" stroke="#c9a227" stroke-width="2"/>
+  <circle cx="76" cy="51" r="3" fill="#c9a227"/>
+
+  <!-- Wheat/grain at base -->
+  <path d="M20 95 L25 85 L30 95 M22 92 L25 85 L28 92" fill="none" stroke="#c9a227" stroke-width="1"/>
+  <path d="M66 95 L71 85 L76 95 M68 92 L71 85 L74 92" fill="none" stroke="#c9a227" stroke-width="1"/>
+
+  <!-- Bottom decorative line -->
+  <line x1="24" y1="108" x2="72" y2="108" stroke="#c9a227" stroke-width="1"/>
+
+  <!-- Card name -->
+  <text x="48" y="122" text-anchor="middle" font-family="Georgia, serif" font-size="8" fill="#c9a227" font-weight="600">THE</text>
+  <text x="48" y="133" text-anchor="middle" font-family="Georgia, serif" font-size="9" fill="#c9a227" font-weight="600">EMPRESS</text>
+</svg>

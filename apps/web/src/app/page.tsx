@@ -13,6 +13,25 @@ export default function DashboardPage() {
   // Use deferred value to avoid blocking input during search
   const deferredSearch = useDeferredValue(searchQuery);
 
+  // Parse search query for skill:, note:, and tag: prefixes
+  const parseSearch = (query: string) => {
+    const skillMatch = query.match(/^skill:\s*(.+)$/i);
+    if (skillMatch) {
+      return { skill: skillMatch[1].trim(), search: undefined, note: undefined, tag: undefined };
+    }
+    const noteMatch = query.match(/^note:\s*(.+)$/i);
+    if (noteMatch) {
+      return { note: noteMatch[1].trim(), search: undefined, skill: undefined, tag: undefined };
+    }
+    const tagMatch = query.match(/^tag:\s*(.+)$/i);
+    if (tagMatch) {
+      return { tag: tagMatch[1].trim(), search: undefined, skill: undefined, note: undefined };
+    }
+    return { search: query || undefined, skill: undefined, note: undefined, tag: undefined };
+  };
+
+  const { search, skill, note, tag } = parseSearch(deferredSearch);
+
   return (
     <AuthGuard>
       <div className="min-h-screen">
@@ -40,14 +59,8 @@ export default function DashboardPage() {
         <div className="grid gap-8 lg:grid-cols-3">
           {/* Contacts Column - Takes 2/3 */}
           <section className="lg:col-span-2 animate-fade-in-up stagger-2">
-            <div className="mb-6 flex items-center justify-between">
-              <h2 className="font-display text-2xl">Recent Contacts</h2>
-              <span className="font-data text-sm text-muted-foreground">
-                2,847 total
-              </span>
-            </div>
             <Suspense fallback={<ContactListSkeleton />}>
-              <ContactList search={deferredSearch || undefined} />
+              <ContactList search={search} skill={skill} note={note} tag={tag} showHeader />
             </Suspense>
           </section>
 

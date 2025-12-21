@@ -1,0 +1,534 @@
+/**
+ * Social Recall - Floating Intelligence Panel
+ * Art Deco styling with dark/gold/cream palette
+ */
+
+/* Import fonts */
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@400;500;600&display=swap');
+
+/* CSS Variables */
+:root {
+  --sr-charcoal: #1a1a1a;
+  --sr-charcoal-light: #2a2a2a;
+  --sr-cream: #f5f2eb;
+  --sr-cream-dark: #e8e4db;
+  --sr-gold: #c9a227;
+  --sr-gold-light: #d4b84a;
+  --sr-gold-dark: #a68820;
+  --sr-crimson: #b22234;
+  --sr-text-light: #fafafa;
+  --sr-text-dark: #1a1a1a;
+  --sr-text-muted: #6b6b6b;
+
+  --sr-font-display: 'Playfair Display', Georgia, serif;
+  --sr-font-body: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+
+  --sr-shadow:
+    0 4px 6px rgba(0, 0, 0, 0.1),
+    0 10px 20px rgba(0, 0, 0, 0.15),
+    0 20px 40px rgba(0, 0, 0, 0.2);
+
+  --sr-transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Panel Container */
+.sr-panel {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 999999;
+  font-family: var(--sr-font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--sr-text-dark);
+  transition: var(--sr-transition);
+}
+
+.sr-panel--draggable {
+  cursor: grab;
+}
+
+.sr-panel--draggable:active {
+  cursor: grabbing;
+}
+
+/* Minimized Orb */
+.sr-panel__orb {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--sr-charcoal) 0%, var(--sr-charcoal-light) 100%);
+  border: 2px solid var(--sr-gold);
+  box-shadow: var(--sr-shadow);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: var(--sr-transition);
+  position: relative;
+  overflow: hidden;
+}
+
+.sr-panel__orb--visible {
+  display: flex;
+}
+
+.sr-panel__orb:hover {
+  transform: scale(1.1);
+  border-color: var(--sr-gold-light);
+  box-shadow:
+    0 0 20px rgba(201, 162, 39, 0.3),
+    var(--sr-shadow);
+}
+
+/* Art deco diamond pattern inside orb */
+.sr-panel__orb::before {
+  content: '◇';
+  font-size: 24px;
+  color: var(--sr-gold);
+  position: absolute;
+}
+
+.sr-panel__orb::after {
+  content: '✦';
+  font-size: 12px;
+  color: var(--sr-gold-light);
+  position: absolute;
+}
+
+/* Pulse animation for alerts */
+.sr-panel__orb--alert {
+  animation: sr-pulse 2s ease-in-out infinite;
+}
+
+@keyframes sr-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(201, 162, 39, 0.4), var(--sr-shadow);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(201, 162, 39, 0), var(--sr-shadow);
+  }
+}
+
+/* Content Panel */
+.sr-panel__content {
+  display: none;
+  width: 300px;
+  background: var(--sr-cream);
+  border-radius: 8px;
+  box-shadow: var(--sr-shadow);
+  overflow: hidden;
+  border: 1px solid var(--sr-gold);
+}
+
+.sr-panel__content--visible {
+  display: block;
+  animation: sr-expand 0.3s ease-out;
+}
+
+@keyframes sr-expand {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Header */
+.sr-panel__header {
+  background: linear-gradient(135deg, var(--sr-charcoal) 0%, var(--sr-charcoal-light) 100%);
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 2px solid var(--sr-gold);
+  position: relative;
+}
+
+/* Art deco corner decorations */
+.sr-panel__header::before,
+.sr-panel__header::after {
+  content: '◇';
+  position: absolute;
+  color: var(--sr-gold);
+  font-size: 10px;
+  opacity: 0.5;
+}
+
+.sr-panel__header::before {
+  top: 4px;
+  left: 4px;
+}
+
+.sr-panel__header::after {
+  top: 4px;
+  right: 24px;
+}
+
+.sr-panel__name {
+  font-family: var(--sr-font-display);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--sr-text-light);
+  letter-spacing: 0.5px;
+}
+
+.sr-panel__minimize {
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: 1px solid var(--sr-gold);
+  border-radius: 4px;
+  color: var(--sr-gold);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: var(--sr-transition);
+}
+
+.sr-panel__minimize:hover {
+  background: var(--sr-gold);
+  color: var(--sr-charcoal);
+}
+
+/* Body */
+.sr-panel__body {
+  padding: 16px;
+  background: var(--sr-cream);
+}
+
+/* Job Change Alert */
+.sr-panel__job-alert {
+  background: linear-gradient(135deg, var(--sr-crimson) 0%, #8b1a28 100%);
+  color: var(--sr-text-light);
+  padding: 10px 12px;
+  border-radius: 6px;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+  box-shadow: 0 2px 8px rgba(178, 34, 52, 0.3);
+}
+
+.sr-panel__job-alert-icon {
+  font-size: 16px;
+}
+
+.sr-panel__job-alert-text {
+  font-size: 13px;
+}
+
+/* Archetype Section */
+.sr-panel__archetype {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--sr-cream-dark);
+}
+
+.sr-panel__tarot {
+  width: 48px;
+  height: 72px;
+  border: 2px solid var(--sr-gold);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  cursor: pointer;
+  transition: var(--sr-transition);
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+.sr-panel__tarot:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(201, 162, 39, 0.3);
+}
+
+/* Tarot card images based on data-card attribute */
+.sr-panel__tarot[data-card="magician"] {
+  background-image: url('tarot/magician.svg');
+}
+
+.sr-panel__tarot[data-card="emperor"] {
+  background-image: url('tarot/emperor.svg');
+}
+
+.sr-panel__tarot[data-card="empress"] {
+  background-image: url('tarot/empress.svg');
+}
+
+.sr-panel__tarot[data-card="hermit"] {
+  background-image: url('tarot/hermit.svg');
+}
+
+.sr-panel__tarot[data-card="chariot"] {
+  background-image: url('tarot/chariot.svg');
+}
+
+.sr-panel__tarot[data-card="strength"] {
+  background-image: url('tarot/strength.svg');
+}
+
+.sr-panel__tarot[data-card="star"] {
+  background-image: url('tarot/star.svg');
+}
+
+.sr-panel__tarot[data-card="lovers"] {
+  background-image: url('tarot/lovers.svg');
+}
+
+.sr-panel__tarot[data-card="high-priestess"] {
+  background-image: url('tarot/high-priestess.svg');
+}
+
+.sr-panel__archetype-name {
+  font-family: var(--sr-font-display);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--sr-text-dark);
+}
+
+/* Skills */
+.sr-panel__skills {
+  font-size: 13px;
+  color: var(--sr-text-muted);
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--sr-cream-dark);
+}
+
+.sr-panel__skill {
+  color: var(--sr-text-dark);
+}
+
+/* Labels for Could Be / Good For */
+.sr-panel__label {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--sr-gold-dark);
+  margin-bottom: 4px;
+}
+
+.sr-panel__could-be,
+.sr-panel__good-for {
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--sr-text-dark);
+}
+
+/* First Seen */
+.sr-panel__first-seen {
+  font-size: 12px;
+  color: var(--sr-text-muted);
+  font-style: italic;
+  margin-top: 8px;
+}
+
+/* Footer */
+.sr-panel__footer {
+  background: var(--sr-charcoal);
+  padding: 12px 16px;
+  border-top: 1px solid var(--sr-gold);
+}
+
+.sr-panel__add-note {
+  width: 100%;
+  padding: 10px 16px;
+  background: transparent;
+  border: 1px solid var(--sr-gold);
+  border-radius: 4px;
+  color: var(--sr-gold);
+  font-family: var(--sr-font-body);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--sr-transition);
+}
+
+.sr-panel__add-note:hover {
+  background: var(--sr-gold);
+  color: var(--sr-charcoal);
+}
+
+/* Tarot Tooltip */
+.sr-panel__tarot-tooltip {
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%);
+  width: 120px;
+  background: var(--sr-charcoal);
+  border: 1px solid var(--sr-gold);
+  border-radius: 6px;
+  padding: 8px;
+  box-shadow: var(--sr-shadow);
+  opacity: 0;
+  visibility: hidden;
+  transition: var(--sr-transition);
+  z-index: 1000000;
+}
+
+.sr-panel__tarot:hover .sr-panel__tarot-tooltip {
+  opacity: 1;
+  visibility: visible;
+}
+
+.sr-panel__tarot-tooltip img {
+  width: 100%;
+  border-radius: 4px;
+}
+
+.sr-panel__tarot-tooltip-name {
+  display: block;
+  text-align: center;
+  color: var(--sr-gold);
+  font-family: var(--sr-font-display);
+  font-size: 12px;
+  margin-top: 6px;
+}
+
+.sr-panel__tarot-tooltip-meaning {
+  display: block;
+  text-align: center;
+  color: var(--sr-text-light);
+  font-size: 10px;
+  margin-top: 4px;
+  opacity: 0.8;
+}
+
+/* Free Tier Counter */
+.sr-panel__counter {
+  text-align: center;
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--sr-gold);
+  border-bottom: 1px solid rgba(201, 162, 39, 0.3);
+  letter-spacing: 0.5px;
+}
+
+/* Hidden state for body when gate shown */
+.sr-panel__body--hidden {
+  display: none;
+}
+
+/* Gate Overlay */
+.sr-panel__gate {
+  background: var(--sr-cream);
+  padding: 20px 16px;
+  text-align: center;
+}
+
+.sr-panel__gate-header {
+  font-family: var(--sr-font-display);
+  font-size: 16px;
+  color: var(--sr-text-dark);
+  margin-bottom: 16px;
+  line-height: 1.4;
+}
+
+.sr-panel__gate-diamond {
+  color: var(--sr-gold);
+  font-size: 12px;
+}
+
+.sr-panel__gate-body {
+  text-align: left;
+  margin-bottom: 20px;
+}
+
+.sr-panel__gate-intro {
+  font-size: 13px;
+  color: var(--sr-text-dark);
+  margin-bottom: 16px;
+  font-weight: 500;
+}
+
+.sr-panel__gate-section {
+  margin-bottom: 14px;
+}
+
+.sr-panel__gate-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--sr-gold-dark);
+  margin-bottom: 6px;
+}
+
+.sr-panel__gate-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.sr-panel__gate-list li {
+  font-size: 12px;
+  color: var(--sr-text-dark);
+  padding: 4px 0;
+  padding-left: 16px;
+  position: relative;
+}
+
+.sr-panel__gate-list li::before {
+  content: '◇';
+  position: absolute;
+  left: 0;
+  color: var(--sr-gold);
+  font-size: 8px;
+  top: 6px;
+}
+
+.sr-panel__gate-cta {
+  width: 100%;
+  padding: 14px 20px;
+  background: linear-gradient(135deg, var(--sr-charcoal) 0%, var(--sr-charcoal-light) 100%);
+  border: 2px solid var(--sr-gold);
+  border-radius: 6px;
+  color: var(--sr-gold);
+  font-family: var(--sr-font-body);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--sr-transition);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.sr-panel__gate-cta:hover {
+  background: var(--sr-gold);
+  color: var(--sr-charcoal);
+  box-shadow: 0 4px 12px rgba(201, 162, 39, 0.3);
+}
+
+.sr-panel__gate-cta::before {
+  content: '';
+  width: 18px;
+  height: 18px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cpath fill='%23FFC107' d='M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8c-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4C12.955 4 4 12.955 4 24s8.955 20 20 20s20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z'/%3E%3Cpath fill='%23FF3D00' d='m6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4C16.318 4 9.656 8.337 6.306 14.691z'/%3E%3Cpath fill='%234CAF50' d='M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238A11.91 11.91 0 0 1 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z'/%3E%3Cpath fill='%231976D2' d='M43.611 20.083H42V20H24v8h11.303a12.04 12.04 0 0 1-4.087 5.571l.003-.002l6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z'/%3E%3C/svg%3E");
+  background-size: contain;
+  background-repeat: no-repeat;
+}
+
+.sr-panel__gate-footer {
+  margin-top: 16px;
+  color: var(--sr-gold);
+  font-size: 12px;
+}

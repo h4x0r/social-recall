@@ -33,6 +33,8 @@ import {
   STRENGTH_LABELS,
 } from "@/lib/relationship";
 import type { RelationshipType } from "@/lib/database.types";
+import { ContactPicker } from "./contact-picker";
+import { TagSelector } from "../tags/tag-selector";
 import {
   Sparkles,
   Loader2,
@@ -54,6 +56,7 @@ import {
   Link,
   Users,
   Star,
+  Tag,
 } from "lucide-react";
 
 interface Employer {
@@ -89,6 +92,8 @@ export function ContactDetail({ contact, open, onOpenChange }: ContactDetailProp
 
         <ScrollArea className="flex-1 -mx-6 px-6">
           <div className="space-y-6 pb-4">
+            <TagsSection contactId={contact.id} />
+            <Separator />
             <RelationshipSection contactId={contact.id} />
             <Separator />
             <EmployersSection employers={contact.employers} />
@@ -128,6 +133,18 @@ function ContactHeader({ contact }: { contact: Contact }) {
           Last updated: {contact.lastUpdated}
         </p>
       </div>
+    </div>
+  );
+}
+
+function TagsSection({ contactId }: { contactId: string }) {
+  return (
+    <div>
+      <h3 className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-3">
+        <Tag className="h-4 w-4" />
+        Tags
+      </h3>
+      <TagSelector contactId={contactId} />
     </div>
   );
 }
@@ -186,6 +203,8 @@ function RelationshipSection({ contactId }: { contactId: string }) {
     context: '',
     sharedCompany: '',
     strength: 3,
+    introducedById: null as string | null,
+    introducedByName: null as string | null,
   });
 
   // Populate form when editing existing relationship
@@ -196,6 +215,8 @@ function RelationshipSection({ contactId }: { contactId: string }) {
         context: relationship.context || '',
         sharedCompany: relationship.sharedCompany || '',
         strength: relationship.strength,
+        introducedById: relationship.introducedById || null,
+        introducedByName: relationship.introducedByName || null,
       });
     }
     setIsEditing(true);
@@ -206,6 +227,7 @@ function RelationshipSection({ contactId }: { contactId: string }) {
       type: formData.type,
       context: formData.context || null,
       sharedCompany: formData.sharedCompany || null,
+      introducedById: formData.type === 'intro' ? formData.introducedById : null,
       strength: formData.strength,
     };
 
@@ -278,6 +300,26 @@ function RelationshipSection({ contactId }: { contactId: string }) {
               {RELATIONSHIP_TYPE_CONFIG[formData.type].description}
             </p>
           </div>
+
+          {/* Introducer picker - shown when type is intro */}
+          {formData.type === 'intro' && (
+            <div className="space-y-2">
+              <Label>Who Introduced You?</Label>
+              <ContactPicker
+                onSelect={(id, name) =>
+                  setFormData({
+                    ...formData,
+                    introducedById: id,
+                    introducedByName: name,
+                  })
+                }
+                selectedContactId={formData.introducedById}
+                selectedContactName={formData.introducedByName}
+                placeholder="Select the person who introduced you..."
+                excludeIds={[contactId]}
+              />
+            </div>
+          )}
 
           {/* Context field - changes based on type */}
           <div className="space-y-2">

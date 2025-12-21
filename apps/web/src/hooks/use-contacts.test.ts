@@ -56,6 +56,7 @@ describe('useContacts', () => {
     updateContact: ReturnType<typeof vi.fn>;
     deleteContact: ReturnType<typeof vi.fn>;
     markContactAsSeen: ReturnType<typeof vi.fn>;
+    countContacts: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -67,6 +68,7 @@ describe('useContacts', () => {
       updateContact: vi.fn(),
       deleteContact: vi.fn(),
       markContactAsSeen: vi.fn(),
+      countContacts: vi.fn().mockResolvedValue({ total: 2, new: 1 }),
     };
 
     (useAuth as ReturnType<typeof vi.fn>).mockReturnValue({
@@ -236,6 +238,57 @@ describe('useContacts', () => {
 
       expect(result.current.contacts).toHaveLength(1);
       expect(result.current.contacts[0].id).toBe('contact-2');
+    });
+  });
+
+  describe('withRelations option', () => {
+    const mockContactsWithRelations = [
+      {
+        id: 'contact-1',
+        userId: 'user-123',
+        linkedinId: 'john-doe',
+        name: 'John Doe',
+        headline: 'CEO @ Startup',
+        isNew: true,
+        createdAt: '2024-01-01',
+        updatedAt: '2024-01-02',
+        employers: [
+          { id: 'e1', contactId: 'contact-1', company: 'Startup Inc', title: 'CEO', logoUrl: null, isCurrent: true, startDate: null, endDate: null, sortOrder: 0, createdAt: '2024-01-01' },
+        ],
+        skills: [
+          { id: 's1', contactId: 'contact-1', name: 'Leadership', category: 'Soft Skills', confidence: 0.9, status: 'confirmed', source: 'inferred', createdAt: '2024-01-01', updatedAt: '2024-01-01' },
+        ],
+      },
+    ];
+
+    beforeEach(() => {
+      (mockRepository as { listContactsWithRelations?: ReturnType<typeof vi.fn> }).listContactsWithRelations = vi.fn().mockResolvedValue(mockContactsWithRelations);
+    });
+
+    it('fetches contacts with employers and skills when withRelations is true', async () => {
+      const { result } = renderHook(() => useContacts({ withRelations: true }));
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      expect((mockRepository as { listContactsWithRelations?: ReturnType<typeof vi.fn> }).listContactsWithRelations).toHaveBeenCalledWith('user-123', { limit: undefined });
+      expect(result.current.contacts).toHaveLength(1);
+      expect(result.current.contacts[0].employers).toHaveLength(1);
+      expect(result.current.contacts[0].employers[0].company).toBe('Startup Inc');
+      expect(result.current.contacts[0].skills).toHaveLength(1);
+      expect(result.current.contacts[0].skills[0].name).toBe('Leadership');
+    });
+
+    it('uses listContacts when withRelations is false', async () => {
+      const { result } = renderHook(() => useContacts({ withRelations: false }));
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      expect(mockRepository.listContacts).toHaveBeenCalled();
+      expect((mockRepository as { listContactsWithRelations?: ReturnType<typeof vi.fn> }).listContactsWithRelations).not.toHaveBeenCalled();
     });
   });
 

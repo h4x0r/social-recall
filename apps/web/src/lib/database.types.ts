@@ -178,6 +178,32 @@ export interface DbContactNoteUpdate {
   content?: string;
 }
 
+// Tags for organizing contacts
+export interface DbTag {
+  id: string;
+  user_id: string;
+  name: string;
+  color: string;
+  created_at: string;
+}
+
+export interface DbContactTag {
+  contact_id: string;
+  tag_id: string;
+  created_at: string;
+}
+
+export interface DbTagInsert {
+  user_id: string;
+  name: string;
+  color?: string;
+}
+
+export interface DbContactTagInsert {
+  contact_id: string;
+  tag_id: string;
+}
+
 // Full contact with relations
 export interface ContactWithRelations extends DbContact {
   employers: DbContactEmployer[];
@@ -218,6 +244,16 @@ export interface Database {
         Row: DbContactRelationship;
         Insert: DbContactRelationshipInsert;
         Update: DbContactRelationshipUpdate;
+      };
+      tags: {
+        Row: DbTag;
+        Insert: DbTagInsert;
+        Update: Partial<DbTagInsert>;
+      };
+      contact_tags: {
+        Row: DbContactTag;
+        Insert: DbContactTagInsert;
+        Update: never;
       };
     };
   };

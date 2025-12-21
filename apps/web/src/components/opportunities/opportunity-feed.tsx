@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useOpportunities } from "@/hooks/use-opportunities";
+import { useRouter } from "next/navigation";
 import { RefreshCw, Zap } from "lucide-react";
 import type { Opportunity } from "@/lib/opportunity-repository";
 import type { OpportunityType } from "@/lib/opportunities";
@@ -11,6 +12,7 @@ import type { OpportunityType } from "@/lib/opportunities";
 // Display opportunity with contact info and relative time
 interface DisplayOpportunity {
   id: string;
+  contactId: string;
   type: OpportunityType;
   contactName: string;
   description: string;
@@ -38,6 +40,7 @@ function formatRelativeTime(dateString: string): string {
 function toDisplayOpportunity(opp: Opportunity): DisplayOpportunity {
   return {
     id: opp.id,
+    contactId: opp.contactId,
     type: opp.type,
     contactName: opp.contact.name,
     description: opp.description,
@@ -64,10 +67,15 @@ const opportunityTypeConfig = {
 };
 
 export function OpportunityFeed() {
+  const router = useRouter();
   const { opportunities, isLoading, error, refresh, dismiss } = useOpportunities();
 
   // Transform to display format
   const displayOpportunities = opportunities.map(toDisplayOpportunity);
+
+  const handleViewProfile = (contactId: string) => {
+    router.push(`/contacts/${contactId}`);
+  };
 
   // Loading state
   if (isLoading) {
@@ -124,6 +132,7 @@ export function OpportunityFeed() {
           key={opportunity.id}
           opportunity={opportunity}
           className={`stagger-${index + 1}`}
+          onViewProfile={() => handleViewProfile(opportunity.contactId)}
           onDismiss={() => dismiss(opportunity.id)}
         />
       ))}
@@ -134,10 +143,11 @@ export function OpportunityFeed() {
 interface OpportunityCardProps {
   opportunity: DisplayOpportunity;
   className?: string;
+  onViewProfile?: () => void;
   onDismiss?: () => void;
 }
 
-function OpportunityCard({ opportunity, className, onDismiss }: OpportunityCardProps) {
+function OpportunityCard({ opportunity, className, onViewProfile, onDismiss }: OpportunityCardProps) {
   const config = opportunityTypeConfig[opportunity.type];
   const Icon = config.icon;
 
@@ -171,7 +181,15 @@ function OpportunityCard({ opportunity, className, onDismiss }: OpportunityCardP
 
       {/* Actions */}
       <div className="flex gap-2">
-        <Button size="sm" variant="outline" className="flex-1 text-xs">
+        <Button
+          size="sm"
+          variant="outline"
+          className="flex-1 text-xs"
+          onClick={(e) => {
+            e.stopPropagation();
+            onViewProfile?.();
+          }}
+        >
           View Profile
         </Button>
         <Button

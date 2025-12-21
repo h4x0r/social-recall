@@ -17,6 +17,8 @@ export { createContactRepository } from './contact-repository';
 export type { ContactRepository } from './contact-repository';
 export { createOpportunityRepository } from './opportunity-repository';
 export type { OpportunityRepository, Opportunity } from './opportunity-repository';
+export { createTagRepository } from './tag-repository';
+export type { TagRepository, Tag, TagInput } from './tag-repository';
 
 // Types for AI inference responses
 export interface InferSkillsResponse {

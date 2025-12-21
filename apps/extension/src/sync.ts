@@ -248,3 +248,44 @@ export function openLoginPage(): void {
     chrome.tabs.create({ url: authUrl });
   });
 }
+
+/**
+ * User info returned from API
+ */
+export interface UserInfo {
+  email: string;
+  name?: string;
+}
+
+/**
+ * Get current user info from web app
+ */
+export async function getUserInfo(): Promise<UserInfo | null> {
+  const token = await getSyncToken();
+  if (!token) {
+    return null;
+  }
+
+  const webAppUrl = await getWebAppUrl();
+
+  try {
+    const response = await fetch(`${webAppUrl}/api/user/me`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        await clearSyncToken();
+      }
+      return null;
+    }
+
+    const data = await response.json();
+    return data.user || null;
+  } catch (e) {
+    return null;
+  }
+}
