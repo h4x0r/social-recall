@@ -377,30 +377,38 @@ function wait(ms: number): Promise<void> {
  * This clicks expansion buttons and waits for content to load
  */
 async function expandAllSections(): Promise<void> {
-  // Find all "Show all" buttons/links on the profile
-  // LinkedIn uses various patterns: "Show all X skills", "Show all X experiences", etc.
+  // Find "Show all" buttons/links - be VERY specific to avoid clicking wrong things
   const showAllButtons = document.querySelectorAll([
     'a[id*="navigation-index-Show-all"]',
-    'button[aria-label*="Show all"]',
-    '.pv-profile-section__see-more-inline',
-    'a.optional-action-target-wrapper',
-    '[data-control-name="see_all"]',
+    'button[aria-label*="Show all"][aria-label*="experience"]',
+    'button[aria-label*="Show all"][aria-label*="education"]',
+    'button[aria-label*="Show all"][aria-label*="skill"]',
+    'button[aria-label*="Show all"][aria-label*="certification"]',
+    'button[aria-label*="Show all"][aria-label*="license"]',
   ].join(', '));
 
   console.log(`[Social Recall] Found ${showAllButtons.length} expandable sections`);
+
+  // Words that indicate we should NOT click this element
+  const skipPatterns = /activit|post|message|connect|follow|more action|pending|withdraw/i;
 
   for (const button of Array.from(showAllButtons)) {
     const btn = button as HTMLElement;
     const label = btn.getAttribute('aria-label') || btn.textContent?.trim() || '';
 
-    // Skip activity-related expansions (we handle those separately with filtering)
-    if (label.toLowerCase().includes('activit') || label.toLowerCase().includes('post')) {
+    // Skip if matches any skip pattern
+    if (skipPatterns.test(label)) {
+      console.log(`[Social Recall] Skipping: ${label}`);
+      continue;
+    }
+
+    // Only click if it looks like "Show all X" pattern
+    if (!label.toLowerCase().includes('show all')) {
       continue;
     }
 
     try {
       btn.click();
-      // Wait for modal/expansion to load
       await wait(300);
       console.log(`[Social Recall] Expanded: ${label}`);
     } catch (e) {
@@ -408,17 +416,17 @@ async function expandAllSections(): Promise<void> {
     }
   }
 
-  // Also expand any "see more" within sections (truncated text)
+  // Expand "see more" text ONLY within profile sections, not header buttons
   const seeMoreButtons = document.querySelectorAll([
-    '.pv-shared-text-with-see-more button',
-    '.inline-show-more-text__button',
-    'button[aria-expanded="false"]',
+    'section .inline-show-more-text__button',
+    'section button[aria-label*="see more"]',
   ].join(', '));
 
   for (const button of Array.from(seeMoreButtons)) {
     const btn = button as HTMLElement;
-    if (btn.textContent?.toLowerCase().includes('see more') ||
-        btn.textContent?.toLowerCase().includes('...more')) {
+    const text = btn.textContent?.toLowerCase() || '';
+    // Only click if it's actually a "see more" text expansion
+    if (text.includes('see more') || text.includes('...more') || text === '…more') {
       try {
         btn.click();
         await wait(100);
@@ -428,7 +436,6 @@ async function expandAllSections(): Promise<void> {
     }
   }
 
-  // Wait a bit more for any async content to settle
   await wait(200);
 }
 
