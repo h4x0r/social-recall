@@ -264,11 +264,33 @@ function savePosition(position: { x: number; y: number }): void {
 /**
  * Load saved panel position
  */
+function isExtensionContextValid(): boolean {
+  try {
+    return chrome.runtime?.id !== undefined;
+  } catch {
+    return false;
+  }
+}
+
 async function loadPosition(): Promise<{ x: number; y: number } | null> {
+  if (!isExtensionContextValid()) {
+    console.log('[Social Recall] Extension context invalidated, skipping loadPosition');
+    return null;
+  }
   return new Promise((resolve) => {
-    chrome.storage.sync.get(['panelPosition'], (result) => {
-      resolve(result.panelPosition || null);
-    });
+    try {
+      chrome.storage.sync.get(['panelPosition'], (result) => {
+        if (chrome.runtime.lastError) {
+          console.log('[Social Recall] Storage error:', chrome.runtime.lastError);
+          resolve(null);
+          return;
+        }
+        resolve(result.panelPosition || null);
+      });
+    } catch (e) {
+      console.log('[Social Recall] Extension context invalidated');
+      resolve(null);
+    }
   });
 }
 
@@ -276,6 +298,12 @@ async function loadPosition(): Promise<{ x: number; y: number } | null> {
  * Handle LinkedIn profile page - extract data and update panel
  */
 async function handleProfilePage(): Promise<void> {
+  // Check if extension context is still valid
+  if (!isExtensionContextValid()) {
+    console.log('[Social Recall] Extension context invalidated, aborting');
+    return;
+  }
+
   const profileId = extractProfileIdFromUrl(window.location.href);
   if (!profileId || profileId === currentProfileId) {
     return;
@@ -293,6 +321,12 @@ async function handleProfilePage(): Promise<void> {
   // Give LinkedIn SPA time to initialize before we start checking
   console.log('[Social Recall] Waiting for LinkedIn SPA to initialize...');
   await wait(1500);
+
+  // Re-check context validity after wait
+  if (!isExtensionContextValid()) {
+    console.log('[Social Recall] Extension context invalidated during wait, aborting');
+    return;
+  }
 
   // Extract profile data from page (includes background activity fetch)
   const profileData = await extractProfileData(profileId, startTime);
@@ -1288,11 +1322,22 @@ async function fetchActivitiesFromActivityPage(profileId: string): Promise<Activ
  * Get stored profile data
  */
 async function getStoredProfile(profileId: string): Promise<StoredProfile | null> {
+  if (!isExtensionContextValid()) {
+    return null;
+  }
   return new Promise((resolve) => {
-    chrome.storage.sync.get(['socialNotes'], (result: StorageData) => {
-      const notes = result.socialNotes || {};
-      resolve(notes[profileId] || null);
-    });
+    try {
+      chrome.storage.sync.get(['socialNotes'], (result: StorageData) => {
+        if (chrome.runtime.lastError) {
+          resolve(null);
+          return;
+        }
+        const notes = result.socialNotes || {};
+        resolve(notes[profileId] || null);
+      });
+    } catch {
+      resolve(null);
+    }
   });
 }
 
@@ -1300,12 +1345,28 @@ async function getStoredProfile(profileId: string): Promise<StoredProfile | null
  * Save profile data
  */
 async function saveProfile(profileId: string, data: StoredProfile): Promise<void> {
+  if (!isExtensionContextValid()) {
+    return;
+  }
   return new Promise((resolve) => {
-    chrome.storage.sync.get(['socialNotes'], (result: StorageData) => {
-      const notes = result.socialNotes || {};
-      notes[profileId] = data;
-      chrome.storage.sync.set({ socialNotes: notes }, resolve);
-    });
+    try {
+      chrome.storage.sync.get(['socialNotes'], (result: StorageData) => {
+        if (chrome.runtime.lastError) {
+          resolve();
+          return;
+        }
+        const notes = result.socialNotes || {};
+        notes[profileId] = data;
+        chrome.storage.sync.set({ socialNotes: notes }, () => {
+          if (chrome.runtime.lastError) {
+            console.log('[Social Recall] Failed to save:', chrome.runtime.lastError);
+          }
+          resolve();
+        });
+      });
+    } catch {
+      resolve();
+    }
   });
 }
 
