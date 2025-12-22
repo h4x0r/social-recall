@@ -598,7 +598,8 @@ function debugLinkedInDOM(): void {
   for (const name of sectionIds) {
     const byId = document.querySelector(`[id*="${name}" i]`);
     if (byId) {
-      console.log(`[Social Recall] Found element with id containing "${name}": ${byId.tagName}.${byId.className.slice(0, 40)}`);
+      const classes = typeof byId.className === 'string' ? byId.className : byId.className?.baseVal || '';
+      console.log(`[Social Recall] Found element with id containing "${name}": ${byId.tagName}.${classes.slice(0, 40)}`);
     }
   }
 
@@ -1399,25 +1400,34 @@ function extractActivities(): Activity[] {
 
   console.log('[Social Recall] Found Activity section on profile page');
   const seen = new Set<string>();
-  const postTexts = activitySection.querySelectorAll('span[aria-hidden="true"]');
+
+  // LinkedIn Activity section often uses a carousel with cards
+  // Look for text content in various places
+  const postTexts = activitySection.querySelectorAll('span[aria-hidden="true"], .update-components-text, .feed-shared-text');
+
+  // Debug: show what we're finding
+  const allTexts = Array.from(postTexts).slice(0, 10).map(el => el.textContent?.trim().slice(0, 50));
+  console.log('[Social Recall] Activity section text samples:', allTexts);
 
   for (const span of postTexts) {
     if (activities.length >= MAX_ACTIVITIES) break;
     const text = span.textContent?.trim();
 
-    // Look for substantial text that looks like a post (not UI elements)
-    if (text && text.length > 50 && !text.includes('Show all') && !text.includes('follower')) {
-      // Deduplicate
-      const textLower = text.toLowerCase();
-      if (seen.has(textLower)) continue;
-      seen.add(textLower);
+    // Skip UI elements and short text
+    if (!text || text.length < 20) continue;
+    if (text.includes('Show all') || text.includes('follower') || text.includes('reaction')) continue;
+    if (/^\d+\s*(reactions?|comments?|reposts?)$/.test(text)) continue;
 
-      activities.push({
-        type: 'post',
-        text: text.slice(0, 500),
-      });
-      console.log(`[Social Recall] Found activity post: ${text.slice(0, 50)}...`);
-    }
+    // Deduplicate
+    const textLower = text.toLowerCase();
+    if (seen.has(textLower)) continue;
+    seen.add(textLower);
+
+    activities.push({
+      type: 'post',
+      text: text.slice(0, 500),
+    });
+    console.log(`[Social Recall] Found activity post: ${text.slice(0, 50)}...`);
   }
 
   console.log(`[Social Recall] Extracted ${activities.length} posts from profile Activity section`);
