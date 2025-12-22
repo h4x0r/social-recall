@@ -475,11 +475,17 @@ function closeModals(): void {
  * This is safer and complies with LinkedIn's terms of service
  */
 async function extractProfileData(profileId: string, startTime: number): Promise<Partial<StoredProfile>> {
+  console.log('[Social Recall] Starting extraction...');
   updateProgress('expanding', startTime);
 
   // Debug: Comprehensive DOM inspection
-  debugLinkedInDOM();
+  try {
+    debugLinkedInDOM();
+  } catch (e) {
+    console.log('[Social Recall] Debug DOM inspection error:', e);
+  }
 
+  console.log('[Social Recall] Extracting profile fields...');
   updateProgress('experience', startTime);
 
   // Extract all data from the main profile page only (no navigation)
@@ -500,6 +506,7 @@ async function extractProfileData(profileId: string, startTime: number): Promise
     lastSeen: new Date().toISOString(),
   };
 
+  console.log('[Social Recall] Extraction complete, updating progress...');
   updateProgress('complete', startTime);
 
   console.log('[Social Recall] Profile data extracted (main page only):', {
@@ -688,7 +695,18 @@ function debugLinkedInDOM(): void {
 function findSectionByHeader(headerText: string): Element | null {
   const searchText = headerText.toLowerCase();
 
-  // Strategy 1: Find section by id attribute containing section name
+  // Strategy 1: Find pv-profile-card__anchor with id containing section name
+  // LinkedIn uses <div id="experience" class="pv-profile-card__anchor"> inside sections
+  const anchor = document.querySelector(`div.pv-profile-card__anchor[id*="${searchText}" i], [id*="${searchText}" i].pv-profile-card__anchor`);
+  if (anchor) {
+    const section = anchor.closest('section');
+    if (section) {
+      console.log(`[Social Recall] Found "${headerText}" via pv-profile-card__anchor id`);
+      return section;
+    }
+  }
+
+  // Strategy 2: Find any element with id containing section name
   const byId = document.querySelector(`section[id*="${searchText}" i], div[id*="${searchText}" i]`);
   if (byId) {
     const section = byId.tagName === 'SECTION' ? byId : byId.closest('section');
