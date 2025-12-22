@@ -3,12 +3,16 @@
   "name": "Social Recall",
   "version": "0.0.0.6",
   "description": "Remind you of people you came across on social networks",
-  "permissions": ["storage", "activeTab", "scripting"],
+  "permissions": ["storage", "activeTab", "scripting", "tabs", "contextMenus"],
   "host_permissions": [
     "*://*.linkedin.com/*",
     "https://social-recall.vercel.app/*",
     "https://*.vercel.app/*"
   ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
   "content_scripts": [
     {
       "matches": ["*://*.linkedin.com/*"],

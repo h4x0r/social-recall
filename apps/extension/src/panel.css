@@ -532,3 +532,115 @@
   color: var(--sr-gold);
   font-size: 12px;
 }
+
+/* Progress Bar */
+.sr-panel__progress {
+  padding: 12px 16px;
+  background: var(--sr-charcoal);
+  border-bottom: 1px solid var(--sr-gold);
+}
+
+.sr-panel__progress--complete {
+  background: linear-gradient(135deg, var(--sr-charcoal) 0%, #1a2a1a 100%);
+}
+
+.sr-panel__progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.sr-panel__progress-label {
+  font-size: 12px;
+  color: var(--sr-cream);
+  font-weight: 500;
+}
+
+.sr-panel__progress-time {
+  font-size: 11px;
+  color: var(--sr-gold);
+  font-family: monospace;
+}
+
+.sr-panel__progress-track {
+  height: 4px;
+  background: rgba(201, 162, 39, 0.2);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.sr-panel__progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--sr-gold-dark), var(--sr-gold));
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.sr-panel__progress--complete .sr-panel__progress-fill {
+  background: linear-gradient(90deg, #4a9e4a, #6dd66d);
+}
+
+/* Worker Grid */
+.sr-panel__progress-workers {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px 8px;
+  margin-bottom: 10px;
+  font-size: 10px;
+}
+
+.sr-panel__progress-workers:empty {
+  display: none;
+}
+
+.sr-panel__progress-worker {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--sr-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.sr-panel__progress-worker-icon {
+  flex-shrink: 0;
+  width: 12px;
+  text-align: center;
+}
+
+.sr-panel__progress-worker-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Worker status colors */
+.sr-panel__progress-worker--pending {
+  color: var(--sr-text-muted);
+}
+
+.sr-panel__progress-worker--pending .sr-panel__progress-worker-icon {
+  color: rgba(201, 162, 39, 0.4);
+}
+
+.sr-panel__progress-worker--loading {
+  color: var(--sr-gold);
+}
+
+.sr-panel__progress-worker--loading .sr-panel__progress-worker-icon {
+  color: var(--sr-gold);
+  animation: sr-spin 1s linear infinite;
+}
+
+@keyframes sr-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.sr-panel__progress-worker--complete {
+  color: #6dd66d;
+}
+
+.sr-panel__progress-worker--complete .sr-panel__progress-worker-icon {
+  color: #6dd66d;
+}

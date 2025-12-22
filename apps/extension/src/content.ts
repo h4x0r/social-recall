@@ -7,7 +7,7 @@
 // Debug: Immediately log when script is parsed
 console.log('[Social Recall] ===== CONTENT SCRIPT STARTING =====');
 
-import { createPanel, Archetype, type ProfileIntelligence, type Panel } from './panel';
+import { createPanel, Archetype, type ProfileIntelligence, type Panel, type WorkerState, type WorkerStatus } from './panel';
 import { extractProfileIdFromUrl, isLinkedInProfileUrl, type Employer } from './utils';
 import { inferIntelligence, type ProfileData as AIProfileData } from './ai-client';
 import {
@@ -28,7 +28,14 @@ interface StoredProfile {
   volunteering?: Volunteering[];
   certifications?: Certification[];
   activities?: Activity[];
+  activityPosts?: string[]; // User's recent posts with their own commentary
   skills?: string[];
+  recommendations?: string[];
+  publications?: string[];
+  organizations?: string[];
+  interests?: string[];
+  testScores?: string[];
+  services?: string[];
   archetype?: Archetype;
   couldBe?: string[];
   goodFor?: string[];
@@ -376,6 +383,284 @@ function wait(ms: number): Promise<void> {
 }
 
 /**
+ * Scrape a LinkedIn detail page in a background tab
+ * This allows extracting data without navigating away from the current profile
+ */
+interface ScrapeResponse {
+  success: boolean;
+  data?: string[];
+  error?: string;
+}
+
+// Ordered by importance (most important first)
+type DetailPageType =
+  | 'activity'
+  | 'services'
+  | 'recommendations'
+  | 'honors'
+  | 'publications'
+  | 'experience'
+  | 'courses'
+  | 'education'
+  | 'certifications'
+  | 'testscores'
+  | 'skills'
+  | 'languages'
+  | 'volunteering'
+  | 'organizations'
+  | 'interests';
+
+// Map detail page types to their URL paths (ordered by importance)
+const DETAIL_PAGE_PATHS: Record<DetailPageType, string> = {
+  activity: 'recent-activity/all',
+  services: 'details/services',
+  recommendations: 'details/recommendations',
+  honors: 'details/honors',
+  publications: 'details/publications',
+  experience: 'details/experience',
+  courses: 'details/courses',
+  education: 'details/education',
+  certifications: 'details/certifications',
+  testscores: 'details/testscores',
+  skills: 'details/skills',
+  languages: 'details/languages',
+  volunteering: 'details/volunteering-experiences',
+  organizations: 'details/organizations',
+  interests: 'details/interests',
+};
+
+async function scrapeDetailPageInBackground(
+  profileId: string,
+  pageType: DetailPageType
+): Promise<string[]> {
+  if (!isExtensionContextValid()) {
+    console.log(`[Social Recall] Extension context invalid, skipping ${pageType} scrape`);
+    return [];
+  }
+
+  const path = DETAIL_PAGE_PATHS[pageType];
+  const url = `https://www.linkedin.com/in/${profileId}/${path}/`;
+  console.log(`[Social Recall] Requesting background ${pageType} scrape for:`, url);
+
+  try {
+    const response: ScrapeResponse = await chrome.runtime.sendMessage({
+      type: 'SCRAPE_SUBPAGE',
+      url,
+      extractorType: pageType,
+    });
+
+    if (response.success && response.data) {
+      console.log(`[Social Recall] Background scrape returned ${response.data.length} ${pageType} items`);
+      return response.data;
+    } else {
+      console.log(`[Social Recall] Background ${pageType} scrape failed:`, response.error);
+      return [];
+    }
+  } catch (error) {
+    console.log(`[Social Recall] Error sending ${pageType} scrape message:`, error);
+    return [];
+  }
+}
+
+/**
+ * Scrape all detail pages SEQUENTIALLY to avoid rate limiting
+ * Fields ordered by importance (most important first)
+ */
+interface AllDetailData {
+  activity: string[];
+  services: string[];
+  recommendations: string[];
+  honors: string[];
+  publications: string[];
+  experience: string[];
+  courses: string[];
+  education: string[];
+  certifications: string[];
+  testscores: string[];
+  skills: string[];
+  languages: string[];
+  volunteering: string[];
+  organizations: string[];
+  interests: string[];
+}
+
+// Detail page types in order of importance for progress tracking
+// Activity is first (most important - user's own thoughts)
+const DETAIL_PAGE_ORDER: DetailPageType[] = [
+  'activity',
+  'services',
+  'recommendations',
+  'honors',
+  'publications',
+  'experience',
+  'courses',
+  'education',
+  'certifications',
+  'testscores',
+  'skills',
+  'languages',
+  'volunteering',
+  'organizations',
+  'interests',
+];
+
+// Random delay between 2-5 seconds to appear human-like
+function randomDelay(): number {
+  const MIN_DELAY_MS = 2000;
+  const MAX_DELAY_MS = 5000;
+  return MIN_DELAY_MS + Math.random() * (MAX_DELAY_MS - MIN_DELAY_MS);
+}
+
+// Cache interface for scraped data
+interface ScrapeCache {
+  [section: string]: {
+    data: string[];
+    scrapedAt: string; // YYYY-MM-DD
+  };
+}
+
+// Get today's date as YYYY-MM-DD
+function getTodayDate(): string {
+  return new Date().toISOString().split('T')[0];
+}
+
+// Load scrape cache from storage
+async function loadScrapeCache(profileId: string): Promise<ScrapeCache> {
+  if (!isExtensionContextValid()) return {};
+  return new Promise((resolve) => {
+    try {
+      chrome.storage.local.get([`scrape_cache_${profileId}`], (result) => {
+        if (chrome.runtime.lastError) {
+          resolve({});
+          return;
+        }
+        resolve(result[`scrape_cache_${profileId}`] || {});
+      });
+    } catch {
+      resolve({});
+    }
+  });
+}
+
+// Save scrape cache to storage
+async function saveScrapeCache(profileId: string, cache: ScrapeCache): Promise<void> {
+  if (!isExtensionContextValid()) return;
+  return new Promise((resolve) => {
+    try {
+      chrome.storage.local.set({ [`scrape_cache_${profileId}`]: cache }, () => {
+        resolve();
+      });
+    } catch {
+      resolve();
+    }
+  });
+}
+
+async function scrapeAllDetailPages(
+  profileId: string,
+  onProgress?: (completed: number, total: number, current: string, workers: WorkerState[]) => void
+): Promise<AllDetailData> {
+  console.log('[Social Recall] Starting SEQUENTIAL scrape of all detail pages (rate-limit safe)');
+
+  const total = DETAIL_PAGE_ORDER.length;
+  let completed = 0;
+  const results: Record<string, string[]> = {};
+  const today = getTodayDate();
+
+  // Load existing cache
+  const cache = await loadScrapeCache(profileId);
+  let cacheUpdated = false;
+
+  // Initialize worker states - check cache to mark already-scraped as complete
+  const workerStates: Map<DetailPageType, WorkerStatus> = new Map();
+  for (const pageType of DETAIL_PAGE_ORDER) {
+    const cached = cache[pageType];
+    if (cached && cached.scrapedAt === today && cached.data.length > 0) {
+      workerStates.set(pageType, 'complete');
+      results[pageType] = cached.data;
+      completed++;
+    } else {
+      workerStates.set(pageType, 'pending');
+    }
+  }
+
+  // Helper to build workers array from current states
+  const buildWorkersArray = (): WorkerState[] => {
+    return DETAIL_PAGE_ORDER.map(pageType => ({
+      name: pageType,
+      status: workerStates.get(pageType) || 'pending',
+    }));
+  };
+
+  // Initial progress update
+  onProgress?.(completed, total, 'checking cache', buildWorkersArray());
+  console.log(`[Social Recall] ${completed} sections already cached for today`);
+
+  // Scrape sections SEQUENTIALLY with delays between each
+  for (const pageType of DETAIL_PAGE_ORDER) {
+    // Skip if already cached
+    if (workerStates.get(pageType) === 'complete') {
+      console.log(`[Social Recall] Using cached ${pageType} data`);
+      continue;
+    }
+
+    // Add random delay before scraping (except for first uncached section)
+    const uncachedSoFar = DETAIL_PAGE_ORDER.filter(p => workerStates.get(p) !== 'complete');
+    if (uncachedSoFar.indexOf(pageType) > 0) {
+      const delay = randomDelay();
+      console.log(`[Social Recall] Waiting ${(delay / 1000).toFixed(1)}s before scraping ${pageType}...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+
+    // Mark as loading
+    workerStates.set(pageType, 'loading');
+    onProgress?.(completed, total, pageType, buildWorkersArray());
+
+    // Scrape the section
+    const data = await scrapeDetailPageInBackground(profileId, pageType);
+    results[pageType] = data;
+
+    // Mark as complete
+    workerStates.set(pageType, 'complete');
+    completed++;
+    onProgress?.(completed, total, pageType, buildWorkersArray());
+    console.log(`[Social Recall] Scraped ${pageType} (${completed}/${total}): ${data.length} items`);
+
+    // Update cache if we got data
+    if (data.length > 0) {
+      cache[pageType] = { data, scrapedAt: today };
+      cacheUpdated = true;
+    }
+  }
+
+  // Save updated cache
+  if (cacheUpdated) {
+    await saveScrapeCache(profileId, cache);
+    console.log('[Social Recall] Cache updated');
+  }
+
+  console.log('[Social Recall] All detail pages scraped (sequential, rate-limit safe)');
+
+  return {
+    activity: results.activity || [],
+    services: results.services || [],
+    recommendations: results.recommendations || [],
+    honors: results.honors || [],
+    publications: results.publications || [],
+    experience: results.experience || [],
+    courses: results.courses || [],
+    education: results.education || [],
+    certifications: results.certifications || [],
+    testscores: results.testscores || [],
+    skills: results.skills || [],
+    languages: results.languages || [],
+    volunteering: results.volunteering || [],
+    organizations: results.organizations || [],
+    interests: results.interests || [],
+  };
+}
+
+/**
  * Expand all "Show all X" sections on the profile page
  * This clicks expansion buttons and waits for content to load
  */
@@ -463,7 +748,7 @@ function closeModals(): void {
 
 /**
  * Extract profile data from the current LinkedIn page
- * Expands all sections first, then extracts data
+ * Uses background tab scraping for all detail pages to get complete data
  */
 async function extractProfileData(profileId: string, startTime: number): Promise<Partial<StoredProfile>> {
   updateProgress('expanding', startTime);
@@ -471,48 +756,76 @@ async function extractProfileData(profileId: string, startTime: number): Promise
   // Debug: Comprehensive DOM inspection
   debugLinkedInDOM();
 
-  // Expand sections (carefully, avoid navigation)
-  await expandAllSections();
-  await waitForStable(300);
-
-  // Extract education
-  updateProgress('education', startTime);
-  const education = extractEducation();
-
-  // Extract experience
-  updateProgress('experience', startTime);
-  const employers = extractEmployers();
-
-  // Extract certifications
-  updateProgress('certifications', startTime);
-  const certifications = extractCertifications();
-
-  // Extract other data (skills-related fields)
-  updateProgress('skills', startTime);
-  const immediateData: Partial<StoredProfile> = {
+  // Extract basic data from the main profile page (name, headline, about, avatar)
+  const basicData = {
     name: extractName(),
     headline: extractHeadline(),
     avatarUrl: extractAvatarUrl(),
     about: extractAbout(),
-    employers,
-    education,
-    honorsAwards: extractHonorsAwards(),
-    courses: extractCourses(),
-    languages: extractLanguages(),
-    volunteering: extractVolunteering(),
-    certifications,
-    activities: [], // We'll fetch from activity page with filtering
-    lastSeen: new Date().toISOString(),
   };
 
-  // Close any modals we opened
+  // Scrape ALL detail pages in parallel using background tabs
+  // This gets complete data without navigating away from the current page
+  updateProgress('skills', startTime);
+
+  const detailData = await scrapeAllDetailPages(profileId, (completed, total, current, workers) => {
+    // Update progress bar with scraping status and worker states
+    if (panel) {
+      const progress = 0.1 + (completed / total) * 0.7; // 10% to 80% of overall progress
+      panel.setProgress({
+        step: 'scraping',
+        label: `Scraping detail pages (${completed}/${total})`,
+        progress,
+        elapsed: Date.now() - startTime,
+        workers,
+      });
+    }
+  });
+
+  // Close any modals we may have triggered
   closeModals();
 
   // Fetch activities from activity page (only posts/reposts with owner commentary, max 20)
   updateProgress('activity', startTime);
-  immediateData.activities = await fetchActivitiesFromActivityPage(profileId);
+  const activities = await fetchActivitiesFromActivityPage(profileId);
 
-  return immediateData;
+  // Build the profile data using scraped detail pages
+  const profileData: Partial<StoredProfile> = {
+    ...basicData,
+    // Convert scraped string arrays to structured data where needed
+    employers: detailData.experience.map((company) => ({ company, logo: '' })),
+    education: detailData.education.map((school) => ({ school })),
+    skills: detailData.skills,
+    certifications: detailData.certifications.map((name) => ({ name })),
+    volunteering: detailData.volunteering.map((org) => ({ organization: org })),
+    honorsAwards: detailData.honors,
+    courses: detailData.courses,
+    languages: detailData.languages,
+    recommendations: detailData.recommendations,
+    publications: detailData.publications,
+    organizations: detailData.organizations,
+    interests: detailData.interests,
+    testScores: detailData.testscores,
+    services: detailData.services,
+    activityPosts: detailData.activity,
+    activities,
+    lastSeen: new Date().toISOString(),
+  };
+
+  console.log('[Social Recall] Profile data extracted:', {
+    name: profileData.name,
+    employers: profileData.employers?.length,
+    education: profileData.education?.length,
+    skills: profileData.skills?.length,
+    certifications: profileData.certifications?.length,
+    volunteering: profileData.volunteering?.length,
+    recommendations: profileData.recommendations?.length,
+    publications: profileData.publications?.length,
+    organizations: profileData.organizations?.length,
+    interests: profileData.interests?.length,
+  });
+
+  return profileData;
 }
 
 function stripNotificationBadge(name: string): string {
@@ -1408,11 +1721,17 @@ function mergeProfileDataSync(
       volunteering: newData.volunteering,
       certifications: newData.certifications,
       activities: newData.activities,
+      recommendations: newData.recommendations,
+      publications: newData.publications,
+      organizations: newData.organizations,
+      interests: newData.interests,
+      testScores: newData.testScores,
+      services: newData.services,
       firstSeen: now,
       lastSeen: now,
-      // Default intelligence values from local heuristics
+      // Default intelligence values - use scraped skills if available
       archetype: inferArchetype(newData),
-      skills: inferSkills(newData),
+      skills: newData.skills?.length ? newData.skills : [],
       couldBe: inferCouldBe(newData),
       goodFor: inferGoodFor(newData),
     };
@@ -1435,11 +1754,18 @@ function mergeProfileDataSync(
     volunteering: newData.volunteering || storedData.volunteering,
     certifications: newData.certifications || storedData.certifications,
     activities: newData.activities || storedData.activities,
+    recommendations: newData.recommendations || storedData.recommendations,
+    publications: newData.publications || storedData.publications,
+    organizations: newData.organizations || storedData.organizations,
+    interests: newData.interests || storedData.interests,
+    testScores: newData.testScores || storedData.testScores,
+    services: newData.services || storedData.services,
+    // Always update skills from scraping (fresh data)
+    skills: newData.skills?.length ? newData.skills : storedData.skills,
     lastSeen: now,
     // Recompute these if archetype was invalid
     ...(needsRecompute && {
       archetype: inferArchetype(newData),
-      skills: inferSkills(newData),
       couldBe: inferCouldBe(newData),
       goodFor: inferGoodFor(newData),
     }),
@@ -1555,10 +1881,17 @@ async function mergeProfileData(
         volunteering: newData.volunteering,
         certifications: newData.certifications,
         activities: newData.activities,
+        recommendations: newData.recommendations,
+        publications: newData.publications,
+        organizations: newData.organizations,
+        interests: newData.interests,
+        testScores: newData.testScores,
+        services: newData.services,
         firstSeen: storedData?.firstSeen || now,
         lastSeen: now,
         archetype: archetypeMap[result.archetype] || Archetype.Unknown,
-        skills: result.skills?.map(s => s.name) || inferSkills(newData),
+        // Prefer scraped skills from page, fall back to AI skills, then empty
+        skills: newData.skills?.length ? newData.skills : (result.skills?.map(s => s.name) || []),
         couldBe: result.couldBe || inferCouldBe(newData),
         goodFor: result.goodFor || inferGoodFor(newData),
         note: storedData?.note,

@@ -136,11 +136,19 @@ export interface Position {
 
 export const FREE_PROFILE_LIMIT = 10;
 
+export type WorkerStatus = 'pending' | 'loading' | 'complete';
+
+export interface WorkerState {
+  name: string;
+  status: WorkerStatus;
+}
+
 export interface ExtractionProgress {
   step: string;
   label: string;
   progress: number; // 0-1
   elapsed: number; // ms
+  workers?: WorkerState[]; // For parallel scraping display
 }
 
 export interface Panel {
@@ -262,6 +270,7 @@ export function createPanel(container: HTMLElement): Panel {
       <span class="sr-panel__progress-label">Loading...</span>
       <span class="sr-panel__progress-time">0.0s</span>
     </div>
+    <div class="sr-panel__progress-workers"></div>
     <div class="sr-panel__progress-track">
       <div class="sr-panel__progress-fill"></div>
     </div>
@@ -531,11 +540,13 @@ export function createPanel(container: HTMLElement): Panel {
     const labelEl = progressBar.querySelector('.sr-panel__progress-label') as HTMLElement;
     const timeEl = progressBar.querySelector('.sr-panel__progress-time') as HTMLElement;
     const fillEl = progressBar.querySelector('.sr-panel__progress-fill') as HTMLElement;
+    const workersEl = progressBar.querySelector('.sr-panel__progress-workers') as HTMLElement;
 
     if (!progress) {
       // Hide progress bar
       progressBar.remove();
       progressBar.classList.remove('sr-panel__progress--complete');
+      workersEl.innerHTML = '';
       return;
     }
 
@@ -547,6 +558,29 @@ export function createPanel(container: HTMLElement): Panel {
     labelEl.textContent = progress.label;
     timeEl.textContent = `${(progress.elapsed / 1000).toFixed(1)}s`;
     fillEl.style.width = `${Math.round(progress.progress * 100)}%`;
+
+    // Render worker grid if workers provided
+    if (progress.workers && progress.workers.length > 0) {
+      const workerStatusIcon = (status: WorkerStatus): string => {
+        switch (status) {
+          case 'pending': return '○';
+          case 'loading': return '◐';
+          case 'complete': return '✓';
+        }
+      };
+      const workerStatusClass = (status: WorkerStatus): string => {
+        return `sr-panel__progress-worker--${status}`;
+      };
+
+      workersEl.innerHTML = progress.workers.map(w =>
+        `<span class="sr-panel__progress-worker ${workerStatusClass(w.status)}" title="${w.name}">
+          <span class="sr-panel__progress-worker-icon">${workerStatusIcon(w.status)}</span>
+          <span class="sr-panel__progress-worker-name">${w.name}</span>
+        </span>`
+      ).join('');
+    } else {
+      workersEl.innerHTML = '';
+    }
 
     if (progress.step === 'complete') {
       progressBar.classList.add('sr-panel__progress--complete');
