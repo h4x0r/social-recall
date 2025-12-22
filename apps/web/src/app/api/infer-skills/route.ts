@@ -267,6 +267,16 @@ function parseResponse(text: string): IntelligenceResponse {
 
 export async function POST(request: NextRequest) {
   try {
+    const body = await request.json();
+
+    // Handle warmup requests (from extension to avoid cold start)
+    if (body.warmup === true) {
+      return NextResponse.json(
+        { success: true, warmup: true },
+        { headers: corsHeaders }
+      );
+    }
+
     // Get client IP for rate limiting
     const forwardedFor = request.headers.get('x-forwarded-for');
     const clientIp = forwardedFor?.split(',')[0]?.trim() || 'unknown';
@@ -288,7 +298,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { profile } = await request.json();
+    const { profile } = body;
 
     if (!profile || !profile.name || !profile.headline) {
       return NextResponse.json(

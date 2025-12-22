@@ -305,6 +305,25 @@ async function loadPosition(): Promise<{ x: number; y: number } | null> {
 }
 
 /**
+ * Warm up the Vercel AI endpoint to avoid cold start delays
+ * Sends a lightweight ping that wakes up the serverless function
+ */
+async function warmUpAI(): Promise<void> {
+  try {
+    const apiUrl = await getApiUrl();
+    // Use HEAD request or minimal POST to warm up without full processing
+    fetch(`${apiUrl}/api/infer-skills`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ warmup: true }),
+    }).catch(() => {}); // Fire and forget, don't wait
+    console.log('[Social Recall] AI warm-up ping sent');
+  } catch {
+    // Ignore errors - this is just a warm-up
+  }
+}
+
+/**
  * Handle LinkedIn profile page - extract data and update panel
  */
 async function handleProfilePage(): Promise<void> {
@@ -313,6 +332,9 @@ async function handleProfilePage(): Promise<void> {
     console.log('[Social Recall] Extension context invalidated, aborting');
     return;
   }
+
+  // Warm up AI endpoint early (fire and forget)
+  warmUpAI();
 
   const profileId = extractProfileIdFromUrl(window.location.href);
   if (!profileId || profileId === currentProfileId) {

@@ -192,8 +192,8 @@ describe('POST /api/infer-skills', () => {
 
       const call = mockGenerateText.mock.calls[0][0];
       expect(call.prompt).toContain('builder');
-      expect(call.prompt).toContain('architect');
-      expect(call.prompt).toContain('designer');
+      expect(call.prompt).toContain('advisor');
+      expect(call.prompt).toContain('creator');
     });
 
     it('includes relationship potential options in prompt', async () => {
