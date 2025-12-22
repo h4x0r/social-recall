@@ -226,20 +226,28 @@ export async function waitForLinkedInProfile(
       const h1 = document.querySelector('h1');
       const hasName = h1?.textContent?.trim().length > 0;
 
-      // Check for Experience or About text
+      // Check for Experience or About text (multiple possible patterns)
       const bodyText = document.body.textContent || '';
-      const hasProfileContent = bodyText.includes('Experience') || bodyText.includes('About');
+      const hasProfileContent = bodyText.includes('Experience') ||
+        bodyText.includes('About') ||
+        bodyText.includes('Skills') ||
+        bodyText.includes('Education');
 
       // Check for main having multiple children
       const mainEl = document.querySelector('main');
       const hasMultipleChildren = (mainEl?.children.length || 0) >= 3;
 
-      // Check for profile sections (pvs-list)
-      const hasPvsList = document.querySelectorAll('[class*="pvs-list"]').length > 0;
+      // Check for profile sections - multiple class patterns
+      const hasPvsElements = document.querySelectorAll('[class*="pvs-"]').length > 50;
+      const hasArtdecoCards = document.querySelectorAll('main section.artdeco-card').length >= 2;
 
-      console.log(`[Social Recall] Load check: name=${hasName}, content=${hasProfileContent}, children=${mainEl?.children.length}, pvsList=${hasPvsList}`);
+      // Check that loaders are gone (sections fully loaded)
+      const loadersGone = document.querySelectorAll('[class*="pvs-loader"]').length === 0;
 
-      return hasName && (hasProfileContent || hasMultipleChildren || hasPvsList);
+      console.log(`[Social Recall] Load check: name=${hasName}, content=${hasProfileContent}, children=${mainEl?.children.length}, pvs=${hasPvsElements}, cards=${hasArtdecoCards}, loadersGone=${loadersGone}`);
+
+      // Either we have profile content text, OR we have enough structural elements
+      return hasName && (hasProfileContent || (hasMultipleChildren && hasPvsElements && loadersGone) || hasArtdecoCards);
     },
     { timeout, interval: 500 }
   );
@@ -250,6 +258,8 @@ export async function waitForLinkedInProfile(
     await waitForStable(500);
   } else {
     console.log('[Social Recall] Profile load timeout - proceeding anyway');
+    // Still wait a bit for content to render
+    await waitForStable(1000);
   }
 
   return loaded;

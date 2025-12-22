@@ -575,11 +575,25 @@ function debugLinkedInDOM(): void {
   const allSections = document.querySelectorAll('section');
   console.log(`[Social Recall] All sections: ${allSections.length}`);
   allSections.forEach((sec, i) => {
-    if (i < 5) { // First 5 only
+    if (i < 8) { // First 8 only
       const classes = sec.className.slice(0, 80);
-      console.log(`[Social Recall] section[${i}]: "${classes}"`);
+      const id = sec.id ? ` id="${sec.id}"` : '';
+      const dataSection = sec.getAttribute('data-section');
+      const dataSectionAttr = dataSection ? ` data-section="${dataSection}"` : '';
+      // Get first meaningful text in section
+      const firstText = sec.querySelector('span, div')?.textContent?.trim().slice(0, 30) || '';
+      console.log(`[Social Recall] section[${i}]:${id}${dataSectionAttr} class="${classes}" text="${firstText}"`);
     }
   });
+
+  // Check for elements with id containing section names
+  const sectionIds = ['experience', 'education', 'skills', 'activity', 'about'];
+  for (const name of sectionIds) {
+    const byId = document.querySelector(`[id*="${name}" i]`);
+    if (byId) {
+      console.log(`[Social Recall] Found element with id containing "${name}": ${byId.tagName}.${byId.className.slice(0, 40)}`);
+    }
+  }
 
   // Check for any h2 elements and their content
   const h2s = document.querySelectorAll('h2');
@@ -603,9 +617,18 @@ function debugLinkedInDOM(): void {
   // Check for profile-card sections (new LinkedIn structure)
   const profileCards = document.querySelectorAll('section[data-view-name="profile-card"]');
   console.log(`[Social Recall] profile-card sections: ${profileCards.length}`);
-  profileCards.forEach((card, i) => {
-    const firstSpan = card.querySelector('span[aria-hidden="true"]');
-    console.log(`[Social Recall] profile-card[${i}]: "${firstSpan?.textContent?.trim().slice(0, 30) || 'no text'}"`);
+
+  // Check for artdeco-card sections in main
+  const artdecoSections = document.querySelectorAll('main section.artdeco-card');
+  console.log(`[Social Recall] artdeco-card sections in main: ${artdecoSections.length}`);
+  artdecoSections.forEach((card, i) => {
+    if (i < 10) {
+      // Try to find section header - look for visually-hidden or sr-only text
+      const srOnly = card.querySelector('.visually-hidden, .sr-only, [class*="visually-hidden"]');
+      const firstSpan = card.querySelector('span[aria-hidden="true"]');
+      const anyText = srOnly?.textContent?.trim() || firstSpan?.textContent?.trim() || '';
+      console.log(`[Social Recall] artdeco[${i}]: "${anyText.slice(0, 50)}"`);
+    }
   });
 
   // Check for pvs-list containers
@@ -629,7 +652,35 @@ function debugLinkedInDOM(): void {
   }
   if (!expFound) {
     console.log('[Social Recall] "Experience" text NOT FOUND anywhere in body');
+    // Check if page is still loading
+    const loaders = document.querySelectorAll('[class*="loader"], [class*="loading"], [class*="skeleton"]');
+    console.log(`[Social Recall] Loading indicators found: ${loaders.length}`);
   }
+
+  // Deep dive into artdeco-card sections to understand structure
+  console.log('[Social Recall] ===== DEEP SECTION ANALYSIS =====');
+  const mainSections = document.querySelectorAll('main section');
+  mainSections.forEach((section, i) => {
+    if (i >= 10) return;
+
+    // Get all unique text content in this section (first 200 chars)
+    const allText = section.textContent?.replace(/\s+/g, ' ').trim().slice(0, 200) || '';
+    console.log(`[Social Recall] Main section[${i}] text preview: "${allText}"`);
+
+    // Check for company logos (indicates experience section)
+    const logos = section.querySelectorAll('img[src*="company"], img[src*="shrink"]');
+    if (logos.length > 0) {
+      console.log(`[Social Recall] Main section[${i}] has ${logos.length} company logos - likely Experience/Education`);
+    }
+
+    // Check for specific LinkedIn elements
+    const entityImages = section.querySelectorAll('[class*="entity-image"]');
+    const pvsEntities = section.querySelectorAll('[class*="pvs-entity"]');
+    if (entityImages.length > 0 || pvsEntities.length > 0) {
+      console.log(`[Social Recall] Main section[${i}] has ${entityImages.length} entity-images, ${pvsEntities.length} pvs-entities`);
+    }
+  });
+  console.log('[Social Recall] ===== END DEEP ANALYSIS =====');
 
   console.log('[Social Recall] ===== END DOM INSPECTION =====');
 }
@@ -637,7 +688,17 @@ function debugLinkedInDOM(): void {
 function findSectionByHeader(headerText: string): Element | null {
   const searchText = headerText.toLowerCase();
 
-  // Strategy 1: Find section with data-view-name="profile-card" that contains matching text
+  // Strategy 1: Find section by id attribute containing section name
+  const byId = document.querySelector(`section[id*="${searchText}" i], div[id*="${searchText}" i]`);
+  if (byId) {
+    const section = byId.tagName === 'SECTION' ? byId : byId.closest('section');
+    if (section) {
+      console.log(`[Social Recall] Found "${headerText}" via id attribute`);
+      return section;
+    }
+  }
+
+  // Strategy 2: Find section with data-view-name="profile-card" that contains matching text
   const profileCards = document.querySelectorAll('section[data-view-name="profile-card"]');
   for (const card of profileCards) {
     // Check first few spans for header text
@@ -651,7 +712,28 @@ function findSectionByHeader(headerText: string): Element | null {
     }
   }
 
-  // Strategy 2: Find any section containing an h2/div with the header text
+  // Strategy 3: Search all artdeco-card sections for header text in any span
+  const artdecoSections = document.querySelectorAll('main section.artdeco-card');
+  for (const section of artdecoSections) {
+    // Check visually-hidden elements (screen reader text often has section names)
+    const srOnly = section.querySelector('.visually-hidden, .sr-only, [class*="visually-hidden"]');
+    if (srOnly?.textContent?.toLowerCase().includes(searchText)) {
+      console.log(`[Social Recall] Found "${headerText}" via visually-hidden text`);
+      return section;
+    }
+
+    // Check first few spans for header text
+    const spans = section.querySelectorAll('span[aria-hidden="true"], span.t-bold');
+    for (let i = 0; i < Math.min(10, spans.length); i++) {
+      const text = spans[i].textContent?.trim().toLowerCase();
+      if (text === searchText || text?.startsWith(searchText)) {
+        console.log(`[Social Recall] Found "${headerText}" via artdeco-card span`);
+        return section;
+      }
+    }
+  }
+
+  // Strategy 4: Find any section containing an h2/div with the header text
   const allSections = document.querySelectorAll('section');
   for (const section of allSections) {
     // Check h2 elements
@@ -660,9 +742,9 @@ function findSectionByHeader(headerText: string): Element | null {
       console.log(`[Social Recall] Found "${headerText}" via section h2`);
       return section;
     }
-    // Check first few text elements
-    const firstSpans = section.querySelectorAll(':scope > div span[aria-hidden="true"]');
-    for (let i = 0; i < Math.min(3, firstSpans.length); i++) {
+    // Check first few text elements - including deeper nesting
+    const firstSpans = section.querySelectorAll('div span[aria-hidden="true"]');
+    for (let i = 0; i < Math.min(5, firstSpans.length); i++) {
       if (firstSpans[i].textContent?.trim().toLowerCase() === searchText) {
         console.log(`[Social Recall] Found "${headerText}" via section span`);
         return section;
@@ -670,7 +752,20 @@ function findSectionByHeader(headerText: string): Element | null {
     }
   }
 
-  // Strategy 3: Find div with pvs-list that's preceded by the header text
+  // Strategy 5: TreeWalker to find the exact text anywhere
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  while (walker.nextNode()) {
+    if (walker.currentNode.textContent?.trim().toLowerCase() === searchText) {
+      const parent = walker.currentNode.parentElement;
+      const section = parent?.closest('section');
+      if (section) {
+        console.log(`[Social Recall] Found "${headerText}" via TreeWalker text search`);
+        return section;
+      }
+    }
+  }
+
+  // Strategy 6: Find div with pvs-list that's preceded by the header text
   const allSpans = document.querySelectorAll('span[aria-hidden="true"]');
   for (const span of allSpans) {
     if (span.textContent?.trim().toLowerCase() === searchText) {
@@ -691,38 +786,61 @@ function extractEmployers(): Employer[] {
   const employers: Employer[] = [];
   const seen = new Set<string>();
 
-  // ONLY extract from Experience section - don't search the whole page
+  // Try to find Experience section by header
   const experienceSection = findSectionByHeader('Experience');
 
-  if (experienceSection) {
-    console.log('[Social Recall] Found Experience section, extracting employers');
+  // If found, extract from that section
+  let searchContainer: Element | Document = experienceSection || document;
+  let sectionFound = !!experienceSection;
 
-    // Find all divs that look like experience entries within the section
-    // LinkedIn uses nested divs, not li elements
-    const allDivs = experienceSection.querySelectorAll('div');
-
-    for (const div of allDivs) {
-      // Look for divs that contain company logo images
-      const img = div.querySelector('img[src*="company-logo"], img[src*="shrink_100"]') as HTMLImageElement;
-      if (!img) continue;
-
-      // Make sure this div is a direct container (not a parent of many items)
-      const nestedImgs = div.querySelectorAll('img[src*="company-logo"], img[src*="shrink_100"]');
-      if (nestedImgs.length > 1) continue; // Skip parent containers
-
-      // Extract company name from this specific experience entry
-      const companyName = extractCompanyNameFromExperience(div);
-      if (companyName && !seen.has(companyName.toLowerCase())) {
-        seen.add(companyName.toLowerCase());
-        employers.push({
-          company: companyName,
-          logo: img.src || '',
-        });
-        console.log(`[Social Recall] Found employer: ${companyName}`);
+  // Fallback: if no Experience section found, look for section with company logos in main
+  if (!experienceSection) {
+    const mainSections = document.querySelectorAll('main section');
+    for (const section of mainSections) {
+      const logos = section.querySelectorAll('img[src*="company-logo"], img[src*="shrink_100"]');
+      // If section has 2+ company logos and is below the top card, likely Experience
+      if (logos.length >= 2) {
+        const sectionRect = section.getBoundingClientRect();
+        // Skip if it's at the very top (profile card area)
+        if (sectionRect.top > 300) {
+          console.log('[Social Recall] Found Experience section by company logo pattern');
+          searchContainer = section;
+          sectionFound = true;
+          break;
+        }
       }
     }
+  }
+
+  if (sectionFound) {
+    console.log('[Social Recall] Extracting employers from section');
   } else {
-    console.log('[Social Recall] Experience section not found');
+    console.log('[Social Recall] Experience section not found, searching entire main');
+    searchContainer = document.querySelector('main') || document;
+  }
+
+  // Find all divs that look like experience entries
+  const allDivs = searchContainer.querySelectorAll('div');
+
+  for (const div of allDivs) {
+    // Look for divs that contain company logo images
+    const img = div.querySelector('img[src*="company-logo"], img[src*="shrink_100"]') as HTMLImageElement;
+    if (!img) continue;
+
+    // Make sure this div is a direct container (not a parent of many items)
+    const nestedImgs = div.querySelectorAll('img[src*="company-logo"], img[src*="shrink_100"]');
+    if (nestedImgs.length > 1) continue; // Skip parent containers
+
+    // Extract company name from this specific experience entry
+    const companyName = extractCompanyNameFromExperience(div);
+    if (companyName && !seen.has(companyName.toLowerCase())) {
+      seen.add(companyName.toLowerCase());
+      employers.push({
+        company: companyName,
+        logo: img.src || '',
+      });
+      console.log(`[Social Recall] Found employer: ${companyName}`);
+    }
   }
 
   console.log('[Social Recall] Extracted employers:', employers.length, employers.map(e => e.company));
