@@ -1653,7 +1653,7 @@ async function mergeProfileData(
     const apiUrl = await getApiUrl();
     console.log('[Social Recall] Calling AI inference at:', apiUrl);
     console.log('[Social Recall] Profile data being sent:', JSON.stringify(aiProfileData, null, 2));
-    const result = await inferIntelligence(aiProfileData, { apiUrl, timeoutMs: 5000 });
+    const result = await inferIntelligence(aiProfileData, { apiUrl, timeoutMs: 15000 });
     console.log('[Social Recall] AI result success:', result?.success);
     console.log('[Social Recall] AI result archetype:', result?.archetype);
     console.log('[Social Recall] AI result skills:', result?.skills);
