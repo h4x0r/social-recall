@@ -705,18 +705,46 @@ export function createPanel(container: HTMLElement): Panel {
     const existingInput = content.querySelector('.sr-panel__note-input');
     existingInput?.remove();
 
-    // Create note input form
+    // Create note input form with refined Art Deco design
     const noteInput = document.createElement('div');
     noteInput.className = 'sr-panel__note-input';
     noteInput.innerHTML = `
-      <div class="sr-panel__note-input-wrapper">
-        <textarea class="sr-panel__note-textarea" placeholder="Add a note about this person..." rows="3" maxlength="${MAX_NOTE_LENGTH}"></textarea>
-        <button class="sr-panel__template-btn" title="Insert template">📝</button>
+      <div class="sr-panel__note-header">
+        <div class="sr-panel__note-header-line"></div>
+        <span class="sr-panel__note-header-title">NEW NOTE</span>
+        <div class="sr-panel__note-header-line"></div>
       </div>
-      <div class="sr-panel__note-char-count">0/${MAX_NOTE_LENGTH}</div>
+      <div class="sr-panel__note-composer">
+        <div class="sr-panel__note-textarea-wrapper">
+          <textarea class="sr-panel__note-textarea" placeholder="What would you like to remember about this person?" rows="4" maxlength="${MAX_NOTE_LENGTH}"></textarea>
+          <div class="sr-panel__note-toolbar">
+            <button class="sr-panel__template-btn" title="Insert template">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <rect x="2" y="3" width="12" height="2" rx="0.5" fill="currentColor"/>
+                <rect x="2" y="7" width="8" height="2" rx="0.5" fill="currentColor"/>
+                <rect x="2" y="11" width="10" height="2" rx="0.5" fill="currentColor"/>
+              </svg>
+            </button>
+            <div class="sr-panel__note-char-indicator">
+              <svg class="sr-panel__char-ring" viewBox="0 0 36 36">
+                <circle class="sr-panel__char-ring-bg" cx="18" cy="18" r="16" fill="none" stroke-width="2"/>
+                <circle class="sr-panel__char-ring-progress" cx="18" cy="18" r="16" fill="none" stroke-width="2" stroke-dasharray="100.53" stroke-dashoffset="100.53"/>
+              </svg>
+              <span class="sr-panel__char-count-text">0</span>
+            </div>
+          </div>
+        </div>
+      </div>
       <div class="sr-panel__note-actions">
-        <button class="sr-panel__note-cancel">Cancel</button>
-        <button class="sr-panel__note-save">Save</button>
+        <button class="sr-panel__note-cancel">
+          <span>Cancel</span>
+        </button>
+        <button class="sr-panel__note-save">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M11.5 3.5L5.5 10.5L2.5 7.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span>Save Note</span>
+        </button>
       </div>
       <div class="sr-panel__note-status"></div>
     `;
@@ -731,14 +759,33 @@ export function createPanel(container: HTMLElement): Panel {
 
     // Focus the textarea
     const textarea = noteInput.querySelector('.sr-panel__note-textarea') as HTMLTextAreaElement;
-    const charCount = noteInput.querySelector('.sr-panel__note-char-count') as HTMLElement;
+    const charCountText = noteInput.querySelector('.sr-panel__char-count-text') as HTMLElement;
+    const charRingProgress = noteInput.querySelector('.sr-panel__char-ring-progress') as SVGCircleElement;
+    const charIndicator = noteInput.querySelector('.sr-panel__note-char-indicator') as HTMLElement;
+    const circumference = 2 * Math.PI * 16; // r=16
     textarea?.focus();
 
-    // Update character count on input
-    textarea?.addEventListener('input', () => {
+    // Update character count and circular progress on input
+    function updateCharCount(): void {
       const currentLength = textarea.value.length;
-      charCount.textContent = `${currentLength}/${MAX_NOTE_LENGTH}`;
-    });
+      const percentage = currentLength / MAX_NOTE_LENGTH;
+      const offset = circumference - (percentage * circumference);
+
+      if (charCountText) charCountText.textContent = `${currentLength}`;
+      if (charRingProgress) charRingProgress.style.strokeDashoffset = `${offset}`;
+
+      // Change color when approaching limit
+      if (charIndicator) {
+        charIndicator.classList.remove('sr-panel__note-char-indicator--warning', 'sr-panel__note-char-indicator--danger');
+        if (percentage >= 0.9) {
+          charIndicator.classList.add('sr-panel__note-char-indicator--danger');
+        } else if (percentage >= 0.75) {
+          charIndicator.classList.add('sr-panel__note-char-indicator--warning');
+        }
+      }
+    }
+
+    textarea?.addEventListener('input', updateCharCount);
 
     // Cancel button handler
     const cancelBtn = noteInput.querySelector('.sr-panel__note-cancel');
@@ -780,8 +827,7 @@ export function createPanel(container: HTMLElement): Panel {
           const template = option.getAttribute('data-template') || '';
           textarea.value = template;
           textarea.focus();
-          // Update character count
-          charCount.textContent = `${template.length}/${MAX_NOTE_LENGTH}`;
+          updateCharCount();
           dropdown.remove();
         });
       });

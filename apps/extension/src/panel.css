@@ -967,61 +967,181 @@
 }
 
 /* Note Input Form */
+/* Note Input - Refined Art Deco Design */
 .sr-panel__note-input {
-  background: var(--sr-charcoal);
-  padding: 12px 16px;
-  border-top: 1px solid rgba(201, 162, 39, 0.3);
+  background: linear-gradient(180deg, var(--sr-charcoal) 0%, rgba(26, 26, 26, 0.95) 100%);
+  padding: 16px 20px 20px;
+  border-top: 1px solid var(--sr-gold);
+  position: relative;
+  animation: noteInputSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes noteInputSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Art Deco Header */
+.sr-panel__note-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.sr-panel__note-header-line {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--sr-gold), transparent);
+}
+
+.sr-panel__note-header-title {
+  font-family: var(--sr-font-display);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  color: var(--sr-gold);
+  text-transform: uppercase;
+}
+
+/* Composer Area */
+.sr-panel__note-composer {
+  position: relative;
+}
+
+.sr-panel__note-textarea-wrapper {
+  position: relative;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(201, 162, 39, 0.4);
+  border-radius: 8px;
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.sr-panel__note-textarea-wrapper:focus-within {
+  border-color: var(--sr-gold);
+  box-shadow: 0 0 0 3px rgba(201, 162, 39, 0.15),
+              inset 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .sr-panel__note-textarea {
   width: 100%;
-  padding: 10px 12px;
-  background: var(--sr-charcoal-light);
-  border: 1px solid var(--sr-gold);
-  border-radius: 4px;
-  color: var(--sr-text-light);
+  padding: 14px 16px;
+  padding-bottom: 44px;
+  background: transparent;
+  border: none;
+  color: var(--sr-cream);
   font-family: var(--sr-font-body);
-  font-size: 13px;
-  line-height: 1.5;
-  resize: vertical;
-  min-height: 60px;
+  font-size: 14px;
+  line-height: 1.6;
+  resize: none;
+  min-height: 100px;
   box-sizing: border-box;
 }
 
 .sr-panel__note-textarea::placeholder {
-  color: var(--sr-text-muted);
+  color: rgba(245, 242, 235, 0.4);
+  font-style: italic;
 }
 
 .sr-panel__note-textarea:focus {
   outline: none;
-  border-color: var(--sr-gold-light);
-  box-shadow: 0 0 0 2px rgba(201, 162, 39, 0.2);
 }
 
-/* Note Input Wrapper for template button */
-.sr-panel__note-input-wrapper {
-  position: relative;
+/* Toolbar inside textarea wrapper */
+.sr-panel__note-toolbar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.4) 100%);
 }
 
 .sr-panel__template-btn {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 28px;
-  height: 28px;
-  background: var(--sr-charcoal);
-  border: 1px solid var(--sr-gold);
-  border-radius: 4px;
+  width: 32px;
+  height: 32px;
+  background: rgba(201, 162, 39, 0.1);
+  border: 1px solid rgba(201, 162, 39, 0.3);
+  border-radius: 6px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
-  transition: var(--sr-transition);
+  color: var(--sr-gold);
+  transition: all 0.2s ease;
 }
 
 .sr-panel__template-btn:hover {
   background: var(--sr-gold);
+  border-color: var(--sr-gold);
+  color: var(--sr-charcoal);
+  transform: scale(1.05);
+}
+
+.sr-panel__template-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Circular Character Counter */
+.sr-panel__note-char-indicator {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sr-panel__char-ring {
+  position: absolute;
+  width: 36px;
+  height: 36px;
+  transform: rotate(-90deg);
+}
+
+.sr-panel__char-ring-bg {
+  stroke: rgba(201, 162, 39, 0.2);
+}
+
+.sr-panel__char-ring-progress {
+  stroke: var(--sr-gold);
+  transition: stroke-dashoffset 0.2s ease, stroke 0.2s ease;
+}
+
+.sr-panel__char-count-text {
+  font-family: var(--sr-font-body);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--sr-gold);
+  z-index: 1;
+}
+
+/* Warning and danger states */
+.sr-panel__note-char-indicator--warning .sr-panel__char-ring-progress {
+  stroke: #d4a03a;
+}
+
+.sr-panel__note-char-indicator--warning .sr-panel__char-count-text {
+  color: #d4a03a;
+}
+
+.sr-panel__note-char-indicator--danger .sr-panel__char-ring-progress {
+  stroke: var(--sr-crimson);
+}
+
+.sr-panel__note-char-indicator--danger .sr-panel__char-count-text {
+  color: var(--sr-crimson);
 }
 
 /* Template Dropdown */
@@ -1063,73 +1183,144 @@
   color: var(--sr-gold);
 }
 
+/* Legacy char count - hidden, using circular indicator now */
 .sr-panel__note-char-count {
-  font-size: 11px;
-  color: var(--sr-text-muted);
-  text-align: right;
-  margin-top: 4px;
+  display: none;
 }
 
+/* Note Actions - Refined Buttons */
 .sr-panel__note-actions {
   display: flex;
-  gap: 8px;
-  margin-top: 10px;
+  gap: 12px;
+  margin-top: 16px;
   justify-content: flex-end;
 }
 
 .sr-panel__note-cancel,
 .sr-panel__note-save {
-  padding: 8px 14px;
-  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 18px;
+  border-radius: 6px;
   font-family: var(--sr-font-body);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: var(--sr-transition);
+  transition: all 0.2s ease;
 }
 
 .sr-panel__note-cancel {
   background: transparent;
-  border: 1px solid var(--sr-text-muted);
-  color: var(--sr-text-muted);
+  border: 1px solid rgba(245, 242, 235, 0.3);
+  color: rgba(245, 242, 235, 0.6);
 }
 
 .sr-panel__note-cancel:hover {
-  border-color: var(--sr-text-light);
-  color: var(--sr-text-light);
+  border-color: var(--sr-cream);
+  color: var(--sr-cream);
+  background: rgba(245, 242, 235, 0.05);
 }
 
 .sr-panel__note-save {
-  background: var(--sr-gold);
-  border: 1px solid var(--sr-gold);
+  background: linear-gradient(135deg, var(--sr-gold) 0%, var(--sr-gold-dark) 100%);
+  border: none;
   color: var(--sr-charcoal);
+  box-shadow: 0 2px 8px rgba(201, 162, 39, 0.3);
+  position: relative;
+  overflow: hidden;
+}
+
+.sr-panel__note-save::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s ease;
 }
 
 .sr-panel__note-save:hover {
-  background: var(--sr-gold-light);
-  border-color: var(--sr-gold-light);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(201, 162, 39, 0.4);
+}
+
+.sr-panel__note-save:hover::before {
+  left: 100%;
+}
+
+.sr-panel__note-save:active {
+  transform: translateY(0);
+}
+
+.sr-panel__note-save svg {
+  width: 14px;
+  height: 14px;
 }
 
 .sr-panel__note-cancel:disabled,
 .sr-panel__note-save:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  transform: none;
 }
 
+/* Note Status - Elegant Feedback */
 .sr-panel__note-status {
-  margin-top: 8px;
+  margin-top: 12px;
+  padding: 8px 12px;
   font-size: 12px;
   text-align: center;
   min-height: 18px;
   color: var(--sr-text-muted);
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.sr-panel__note-status:empty {
+  display: none;
 }
 
 .sr-panel__note-status--error {
-  color: var(--sr-crimson);
+  background: rgba(178, 34, 52, 0.15);
+  color: #ff6b7a;
+  border: 1px solid rgba(178, 34, 52, 0.3);
 }
 
 .sr-panel__note-status--success {
-  color: var(--sr-gold);
+  background: rgba(201, 162, 39, 0.15);
+  color: var(--sr-gold-light);
+  border: 1px solid rgba(201, 162, 39, 0.3);
+}
+
+/* Loading Indicator for Mode Transitions */
+.sr-panel__loading-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  gap: 16px;
+  color: var(--sr-text-muted);
+  font-size: 13px;
+}
+
+.sr-panel__loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 2px solid rgba(201, 162, 39, 0.2);
+  border-top-color: var(--sr-gold);
+  border-radius: 50%;
+  animation: spinnerRotate 0.8s linear infinite;
+}
+
+@keyframes spinnerRotate {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Notes Section (displaying saved notes) */
