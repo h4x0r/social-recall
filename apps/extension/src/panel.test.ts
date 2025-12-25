@@ -357,66 +357,86 @@ describe('Floating Intelligence Panel', () => {
   });
 
   describe('keyboard shortcuts', () => {
-    it('toggles panel with "m" key when panel is focused', () => {
+    it('toggles panel with M key when panel is focused', () => {
       const panel = createPanel(container);
       panel.toggle(); // expand first
       expect(panel.getState()).toBe(PanelState.Expanded);
 
-      // Simulate 'm' key press
-      const event = new KeyboardEvent('keydown', { key: 'm' });
-      document.dispatchEvent(event);
+      // Focus panel and press M
+      panel.element.focus();
+      const event = new KeyboardEvent('keydown', { key: 'm', bubbles: true });
+      panel.element.dispatchEvent(event);
 
       expect(panel.getState()).toBe(PanelState.Minimized);
     });
 
-    it('toggles panel with "M" key (uppercase)', () => {
+    it('toggles panel with M key (uppercase) when focused', () => {
       const panel = createPanel(container);
       expect(panel.getState()).toBe(PanelState.Minimized);
 
-      const event = new KeyboardEvent('keydown', { key: 'M' });
-      document.dispatchEvent(event);
+      // Focus panel and press M
+      panel.element.focus();
+      const event = new KeyboardEvent('keydown', { key: 'M', bubbles: true });
+      panel.element.dispatchEvent(event);
 
       expect(panel.getState()).toBe(PanelState.Expanded);
     });
 
-    it('minimizes panel with Escape key', () => {
+    it('minimizes panel with Escape key (works globally)', () => {
       const panel = createPanel(container);
       panel.toggle(); // expand first
       expect(panel.getState()).toBe(PanelState.Expanded);
 
+      // Escape works globally, no need to focus panel
       const event = new KeyboardEvent('keydown', { key: 'Escape' });
       document.dispatchEvent(event);
 
       expect(panel.getState()).toBe(PanelState.Minimized);
     });
 
-    it('opens note input with "n" key when expanded', () => {
+    it('opens note input with N key when panel is focused and expanded', () => {
       const panel = createPanel(container);
       panel.toggle(); // expand
 
-      const event = new KeyboardEvent('keydown', { key: 'n' });
-      document.dispatchEvent(event);
+      // Focus panel and press N
+      panel.element.focus();
+      const event = new KeyboardEvent('keydown', { key: 'n', bubbles: true });
+      panel.element.dispatchEvent(event);
 
       const noteInput = panel.element.querySelector('.sr-panel__note-input');
       expect(noteInput).not.toBeNull();
     });
 
-    it('does not open note input with "n" key when minimized', () => {
+    it('does not open note input with N key when minimized', () => {
       const panel = createPanel(container);
       expect(panel.getState()).toBe(PanelState.Minimized);
 
-      const event = new KeyboardEvent('keydown', { key: 'n' });
-      document.dispatchEvent(event);
+      // Focus panel and press N
+      panel.element.focus();
+      const event = new KeyboardEvent('keydown', { key: 'n', bubbles: true });
+      panel.element.dispatchEvent(event);
 
       const noteInput = panel.element.querySelector('.sr-panel__note-input');
       expect(noteInput).toBeNull();
     });
 
-    it('ignores shortcuts when typing in textarea', () => {
+    it('ignores shortcuts when panel is not focused', () => {
       const panel = createPanel(container);
       panel.toggle(); // expand
 
-      // Create a textarea and dispatch event from it
+      // Don't focus panel, press M on document
+      const event = new KeyboardEvent('keydown', { key: 'm', bubbles: true });
+      document.dispatchEvent(event);
+
+      // Panel should still be expanded (shortcut ignored - panel not focused)
+      expect(panel.getState()).toBe(PanelState.Expanded);
+    });
+
+    it('ignores shortcuts when typing in textarea outside panel', () => {
+      const panel = createPanel(container);
+      panel.toggle(); // expand
+
+      // Create a textarea outside panel and focus it
       const textarea = document.createElement('textarea');
       container.appendChild(textarea);
       textarea.focus();
@@ -424,23 +444,7 @@ describe('Floating Intelligence Panel', () => {
       const event = new KeyboardEvent('keydown', { key: 'm', bubbles: true });
       textarea.dispatchEvent(event);
 
-      // Panel should still be expanded (shortcut ignored)
-      expect(panel.getState()).toBe(PanelState.Expanded);
-    });
-
-    it('ignores shortcuts when typing in input', () => {
-      const panel = createPanel(container);
-      panel.toggle(); // expand
-
-      // Create an input and dispatch event from it
-      const input = document.createElement('input');
-      container.appendChild(input);
-      input.focus();
-
-      const event = new KeyboardEvent('keydown', { key: 'm', bubbles: true });
-      input.dispatchEvent(event);
-
-      // Panel should still be expanded (shortcut ignored)
+      // Panel should still be expanded (shortcut ignored - focus outside panel)
       expect(panel.getState()).toBe(PanelState.Expanded);
     });
 
@@ -448,14 +452,15 @@ describe('Floating Intelligence Panel', () => {
       const panel = createPanel(container);
       panel.toggle(); // expand
 
-      // Open note input
-      const nEvent = new KeyboardEvent('keydown', { key: 'n' });
-      document.dispatchEvent(nEvent);
+      // Focus panel and open note input with N
+      panel.element.focus();
+      const nEvent = new KeyboardEvent('keydown', { key: 'n', bubbles: true });
+      panel.element.dispatchEvent(nEvent);
 
       let noteInput = panel.element.querySelector('.sr-panel__note-input');
       expect(noteInput).not.toBeNull();
 
-      // Press Escape
+      // Press Escape (works globally)
       const escEvent = new KeyboardEvent('keydown', { key: 'Escape' });
       document.dispatchEvent(escEvent);
 
@@ -467,10 +472,11 @@ describe('Floating Intelligence Panel', () => {
 
     it('cleans up keyboard listeners when panel is destroyed', () => {
       const panel = createPanel(container);
+      panel.element.focus();
       panel.destroy();
 
       // After destroy, shortcuts should not work
-      const event = new KeyboardEvent('keydown', { key: 'm' });
+      const event = new KeyboardEvent('keydown', { key: 'm', bubbles: true });
       document.dispatchEvent(event);
 
       // Panel state should remain minimized (default)
@@ -739,17 +745,21 @@ describe('Floating Intelligence Panel', () => {
       panel.setIntelligence(baseIntelligence);
       panel.toggle();
 
-      // Press 'N' to open note input
+      // Focus panel and press N to open note input
+      panel.element.focus();
       const event = new KeyboardEvent('keydown', { key: 'n', bubbles: true });
-      document.dispatchEvent(event);
+      panel.element.dispatchEvent(event);
 
-      // Should show note input with character count
+      // Should show note input with circular character counter
       const noteInput = panel.element.querySelector('.sr-panel__note-input');
       expect(noteInput).not.toBeNull();
 
-      const charCount = noteInput?.querySelector('.sr-panel__note-char-count');
-      expect(charCount).not.toBeNull();
-      expect(charCount?.textContent).toBe('0/500');
+      const charRing = noteInput?.querySelector('.sr-panel__char-ring');
+      expect(charRing).not.toBeNull();
+
+      const charCountText = noteInput?.querySelector('.sr-panel__char-count-text');
+      expect(charCountText).not.toBeNull();
+      expect(charCountText?.textContent).toBe('0');
 
       // Type some text
       const textarea = noteInput?.querySelector('textarea') as HTMLTextAreaElement;
@@ -757,7 +767,7 @@ describe('Floating Intelligence Panel', () => {
       textarea.dispatchEvent(new Event('input', { bubbles: true }));
 
       // Character count should update
-      expect(charCount?.textContent).toBe('11/500');
+      expect(charCountText?.textContent).toBe('11');
     });
   });
 
@@ -1645,8 +1655,8 @@ describe('Floating Intelligence Panel', () => {
     });
   });
 
-  describe('quick actions menu (Cmd+K)', () => {
-    it('opens quick actions menu when Cmd+K is pressed', () => {
+  describe('quick actions menu (K key)', () => {
+    it('opens quick actions menu when K is pressed with panel focused', () => {
       const panel = createPanel(container);
       panel.setIntelligence({
         name: 'Test User',
@@ -1657,9 +1667,10 @@ describe('Floating Intelligence Panel', () => {
       });
       panel.toggle();
 
-      // Simulate Cmd+K
-      const event = new KeyboardEvent('keydown', { key: 'k', metaKey: true });
-      document.dispatchEvent(event);
+      // Focus panel and press K
+      panel.element.focus();
+      const event = new KeyboardEvent('keydown', { key: 'k', bubbles: true });
+      panel.element.dispatchEvent(event);
 
       const quickActionsMenu = panel.element.querySelector('.sr-panel__quick-actions');
       expect(quickActionsMenu).not.toBeNull();
@@ -1676,8 +1687,9 @@ describe('Floating Intelligence Panel', () => {
       });
       panel.toggle();
 
-      const event = new KeyboardEvent('keydown', { key: 'k', metaKey: true });
-      document.dispatchEvent(event);
+      panel.element.focus();
+      const event = new KeyboardEvent('keydown', { key: 'k', bubbles: true });
+      panel.element.dispatchEvent(event);
 
       const searchInput = panel.element.querySelector('.sr-panel__quick-actions-input') as HTMLInputElement;
       expect(searchInput).not.toBeNull();
@@ -1695,8 +1707,9 @@ describe('Floating Intelligence Panel', () => {
       });
       panel.toggle();
 
-      const event = new KeyboardEvent('keydown', { key: 'k', metaKey: true });
-      document.dispatchEvent(event);
+      panel.element.focus();
+      const event = new KeyboardEvent('keydown', { key: 'k', bubbles: true });
+      panel.element.dispatchEvent(event);
 
       const actionOptions = panel.element.querySelectorAll('.sr-panel__quick-action-item');
       expect(actionOptions.length).toBeGreaterThan(0);
@@ -1713,8 +1726,9 @@ describe('Floating Intelligence Panel', () => {
       });
       panel.toggle();
 
-      const event = new KeyboardEvent('keydown', { key: 'k', metaKey: true });
-      document.dispatchEvent(event);
+      panel.element.focus();
+      const event = new KeyboardEvent('keydown', { key: 'k', bubbles: true });
+      panel.element.dispatchEvent(event);
 
       const searchInput = panel.element.querySelector('.sr-panel__quick-actions-input') as HTMLInputElement;
       searchInput.value = 'note';
@@ -1742,11 +1756,12 @@ describe('Floating Intelligence Panel', () => {
       });
       panel.toggle();
 
-      // Open menu
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }));
+      // Focus panel and open menu
+      panel.element.focus();
+      panel.element.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', bubbles: true }));
       expect(panel.element.querySelector('.sr-panel__quick-actions')).not.toBeNull();
 
-      // Close with Escape
+      // Close with Escape (works globally)
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
       expect(panel.element.querySelector('.sr-panel__quick-actions')).toBeNull();
     });
@@ -1764,7 +1779,8 @@ describe('Floating Intelligence Panel', () => {
       });
       panel.toggle();
 
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }));
+      panel.element.focus();
+      panel.element.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', bubbles: true }));
 
       const addNoteAction = panel.element.querySelector('[data-action="add-note"]') as HTMLElement;
       addNoteAction?.click();
@@ -1892,7 +1908,7 @@ describe('Floating Intelligence Panel', () => {
   });
 
   describe('keyboard navigation', () => {
-    it('highlights first note when pressing down arrow in notes section', () => {
+    it('highlights first note when pressing down arrow with panel focused', () => {
       const panel = createPanel(container);
       panel.setIntelligence({
         name: 'Test User',
@@ -1907,8 +1923,9 @@ describe('Floating Intelligence Panel', () => {
       ]);
       panel.toggle();
 
-      // Press down arrow
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
+      // Focus panel and press Down arrow
+      panel.element.focus();
+      panel.element.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
 
       const highlightedNote = panel.element.querySelector('.sr-panel__note-item--focused');
       expect(highlightedNote).not.toBeNull();
@@ -1930,9 +1947,10 @@ describe('Floating Intelligence Panel', () => {
       ]);
       panel.toggle();
 
-      // Press down arrow twice
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
+      // Focus panel and press Down arrow twice
+      panel.element.focus();
+      panel.element.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      panel.element.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
 
       const highlightedNote = panel.element.querySelector('.sr-panel__note-item--focused');
       expect(highlightedNote?.getAttribute('data-note-id')).toBe('note-2');
@@ -1953,10 +1971,11 @@ describe('Floating Intelligence Panel', () => {
       ]);
       panel.toggle();
 
-      // Navigate to second, then back to first
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
+      // Focus panel, navigate to second, then back to first
+      panel.element.focus();
+      panel.element.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      panel.element.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      panel.element.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
 
       const highlightedNote = panel.element.querySelector('.sr-panel__note-item--focused');
       expect(highlightedNote?.getAttribute('data-note-id')).toBe('note-1');
@@ -1976,9 +1995,10 @@ describe('Floating Intelligence Panel', () => {
       ]);
       panel.toggle();
 
-      // Focus note and press Enter
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+      // Focus panel, focus note with Down arrow, press Enter to edit
+      panel.element.focus();
+      panel.element.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      panel.element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
 
       const editForm = panel.element.querySelector('.sr-panel__note-edit-form');
       expect(editForm).not.toBeNull();
@@ -1998,8 +2018,9 @@ describe('Floating Intelligence Panel', () => {
       ]);
       panel.toggle();
 
-      // Focus note and press Escape
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
+      // Focus panel, focus note with Down arrow, press Escape to clear
+      panel.element.focus();
+      panel.element.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
 
       const highlightedNote = panel.element.querySelector('.sr-panel__note-item--focused');

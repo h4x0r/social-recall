@@ -446,6 +446,7 @@ export function createPanel(container: HTMLElement): Panel {
   const element = document.createElement('div');
   element.className = 'sr-panel sr-panel--minimized sr-panel--draggable';
   element.style.transform = `translate(${position.x}px, ${position.y}px)`;
+  element.setAttribute('tabindex', '0'); // Make panel focusable for keyboard shortcuts
 
   const orb = document.createElement('div');
   orb.className = 'sr-panel__orb sr-panel__orb--visible';
@@ -604,9 +605,28 @@ export function createPanel(container: HTMLElement): Panel {
         ` : ''}
       </div>
       <div class="sr-panel__footer">
-        <button class="sr-panel__add-note">+ Add note</button>
-        <button class="sr-panel__add-introduction">+ Add intro</button>
-        <button class="sr-panel__reanalyze" title="Re-run AI analysis">↻ Re-analyze</button>
+        <button class="sr-panel__add-note">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M10.5 1.5L12.5 3.5L4.5 11.5L1.5 12.5L2.5 9.5L10.5 1.5Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M8.5 3.5L10.5 5.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          <span>Add note</span>
+        </button>
+        <button class="sr-panel__add-introduction">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <circle cx="4" cy="4" r="2.5" stroke="currentColor" stroke-width="1.5"/>
+            <circle cx="10" cy="4" r="2.5" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M1 12.5C1 10.5 2.5 9 4.5 9C5.5 9 6.5 9.5 7 10C7.5 9.5 8.5 9 9.5 9C11.5 9 13 10.5 13 12.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          <span>Add intro</span>
+        </button>
+        <button class="sr-panel__reanalyze" title="Re-run AI analysis">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M1.5 7C1.5 4 4 1.5 7 1.5C10 1.5 12.5 4 12.5 7C12.5 10 10 12.5 7 12.5C5 12.5 3.3 11.5 2.3 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <path d="M1 7.5L2.3 10L4.5 8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span>Re-analyze</span>
+        </button>
       </div>
     `;
 
@@ -1063,9 +1083,34 @@ export function createPanel(container: HTMLElement): Panel {
     if (minimal) {
       element.classList.add('sr-panel--minimal');
       orb.title = 'Social Recall - Click to see recent profiles';
+      // Force collapse when entering minimal mode (non-profile page)
+      if (state === PanelState.Expanded) {
+        state = PanelState.Minimized;
+        element.classList.remove('sr-panel--expanded');
+        element.classList.add('sr-panel--minimized');
+        orb.classList.add('sr-panel__orb--visible');
+        content.classList.remove('sr-panel__content--visible');
+      }
     } else {
       element.classList.remove('sr-panel--minimal');
       orb.title = '';
+      // When leaving minimal mode (switching to profile), show loading immediately
+      // This ensures the history content is cleared while waiting for profile data
+      const tarotCard = ARCHETYPE_TAROT[Archetype.Unknown];
+      content.innerHTML = `
+        <div class="sr-panel__header">
+          <span class="sr-panel__name">Loading...</span>
+          <button class="sr-panel__minimize">━</button>
+        </div>
+        <div class="sr-panel__body">
+          <div class="sr-panel__archetype">
+            <div class="sr-panel__tarot sr-panel__tarot--loading" data-card="${tarotCard}" title="Analyzing..."></div>
+            <span class="sr-panel__archetype-name sr-panel__archetype-name--loading">Analyzing...</span>
+          </div>
+        </div>
+      `;
+      const minimizeBtn = content.querySelector('.sr-panel__minimize');
+      minimizeBtn?.addEventListener('click', toggle);
     }
   }
 
@@ -1113,11 +1158,11 @@ export function createPanel(container: HTMLElement): Panel {
     }
 
     function updateUI(): void {
-      const historyBody = content.querySelector('.sr-panel__history');
+      const historyList = content.querySelector('.sr-panel__history-list');
       const bulkActionsContainer = content.querySelector('.sr-panel__bulk-actions-container');
 
-      if (historyBody) {
-        historyBody.innerHTML = renderHistoryItems();
+      if (historyList) {
+        historyList.innerHTML = renderHistoryItems();
         wireUpHistoryItems();
       }
 
@@ -1210,7 +1255,7 @@ export function createPanel(container: HTMLElement): Panel {
 
     content.innerHTML = `
       <div class="sr-panel__header">
-        <span class="sr-panel__name">Recent Profiles</span>
+        <span class="sr-panel__name">Social Recall</span>
         <div class="sr-panel__header-actions">
           ${profiles.length > 0 ? '<button class="sr-panel__bulk-toggle">Select</button>' : ''}
           <button class="sr-panel__minimize">━</button>
@@ -1218,7 +1263,12 @@ export function createPanel(container: HTMLElement): Panel {
       </div>
       <div class="sr-panel__bulk-actions-container"></div>
       <div class="sr-panel__body sr-panel__history">
-        ${renderHistoryItems()}
+        <div class="sr-panel__history-header">
+          <span class="sr-panel__history-label">RECENT</span>
+        </div>
+        <div class="sr-panel__history-list">
+          ${renderHistoryItems()}
+        </div>
       </div>
     `;
 
@@ -2443,59 +2493,90 @@ export function createPanel(container: HTMLElement): Panel {
     if (isDestroyed) return;
 
     const key = e.key.toLowerCase();
+    const target = e.target as HTMLElement;
 
-    // Handle Cmd+K / Ctrl+K for quick actions (even in inputs)
-    if (key === 'k' && (e.metaKey || e.ctrlKey)) {
+    // Check if panel has focus (panel itself or any element within it)
+    const panelHasFocus = element.contains(document.activeElement) || element === document.activeElement;
+
+    // Check if we're in an editable area within the panel
+    const isEditableInPanel = panelHasFocus && target && (
+      target.tagName === 'INPUT' ||
+      target.tagName === 'TEXTAREA'
+    );
+
+    // Handle Escape globally (standard close behavior)
+    if (key === 'escape') {
+      if (quickActionsOpen) {
+        closeQuickActionsMenu();
+        return;
+      }
+      if (focusedNoteIndex >= 0) {
+        clearNoteFocus();
+        return;
+      }
+      if (closeNoteInput()) {
+        return;
+      }
+      if (state === PanelState.Expanded) {
+        toggle();
+      }
+      return;
+    }
+
+    // All other shortcuts only work when panel has focus
+    if (!panelHasFocus) return;
+
+    // Don't capture shortcuts when typing in input/textarea within panel
+    // (except for special cases handled below)
+    if (isEditableInPanel) {
+      // Allow Enter to submit in note input
+      if (key === 'enter' && !e.shiftKey && target.closest('.sr-panel__note-input')) {
+        // Let the form handle submit naturally
+        return;
+      }
+      return;
+    }
+
+    // K - Quick actions menu
+    if (key === 'k') {
       e.preventDefault();
       if (state === PanelState.Expanded) {
         showQuickActionsMenu();
       }
-      return;
     }
-
-    // Handle Escape to close quick actions menu first
-    if (key === 'escape' && quickActionsOpen) {
-      closeQuickActionsMenu();
-      return;
-    }
-
-    // Ignore other shortcuts when typing in input/textarea
-    const target = e.target as HTMLElement;
-    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
-      return;
-    }
-
-    if (key === 'escape') {
-      // First clear note focus, then close note input, then minimize panel
-      if (focusedNoteIndex >= 0) {
-        clearNoteFocus();
-      } else if (!closeNoteInput() && state === PanelState.Expanded) {
-        toggle();
-      }
-    } else if (key === 'm') {
-      // Toggle minimize/expand
+    // M - Toggle minimize/expand
+    else if (key === 'm') {
+      e.preventDefault();
       toggle();
-    } else if (key === 'n') {
-      // Open note input (only when expanded)
+    }
+    // N - Open note input
+    else if (key === 'n') {
+      e.preventDefault();
       if (state === PanelState.Expanded) {
         showNoteInput();
       }
-    } else if (key === 'arrowdown' && state === PanelState.Expanded) {
-      // Navigate to next note
+    }
+    // ArrowDown - Navigate to next note
+    else if (key === 'arrowdown' && state === PanelState.Expanded) {
+      e.preventDefault();
       const notes = content.querySelectorAll('.sr-panel__note-item:not(.sr-panel__note--hidden)');
       if (notes.length > 0) {
         focusedNoteIndex = Math.min(focusedNoteIndex + 1, notes.length - 1);
         updateNoteFocus();
       }
-    } else if (key === 'arrowup' && state === PanelState.Expanded) {
-      // Navigate to previous note
+    }
+    // ArrowUp - Navigate to previous note
+    else if (key === 'arrowup' && state === PanelState.Expanded) {
+      e.preventDefault();
       const notes = content.querySelectorAll('.sr-panel__note-item:not(.sr-panel__note--hidden)');
       if (notes.length > 0 && focusedNoteIndex > 0) {
         focusedNoteIndex = Math.max(focusedNoteIndex - 1, 0);
         updateNoteFocus();
       }
-    } else if (key === 'enter' && focusedNoteIndex >= 0) {
-      // Edit focused note
+    }
+    // Enter - Edit focused note
+    else if (key === 'enter' && focusedNoteIndex >= 0) {
+      e.preventDefault();
       triggerEditOnFocusedNote();
     }
   }
