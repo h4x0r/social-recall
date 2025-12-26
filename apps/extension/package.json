@@ -3,8 +3,8 @@
   "version": "0.0.7",
   "description": "Chrome extension for Social Recall - save LinkedIn profiles with one click",
   "scripts": {
-    "build": "npx esbuild src/content.ts src/background.ts src/popup.ts src/settings.ts --bundle --outdir=dist --target=es2017 --format=iife",
-    "watch": "npx esbuild src/content.ts src/background.ts src/popup.ts src/settings.ts --bundle --outdir=dist --target=es2017 --format=iife --watch",
+    "build": "npx esbuild src/content.ts src/background.ts src/popup.ts src/settings.ts src/voyager-interceptor.ts --bundle --outdir=dist --target=es2017 --format=iife",
+    "watch": "npx esbuild src/content.ts src/background.ts src/popup.ts src/settings.ts src/voyager-interceptor.ts --bundle --outdir=dist --target=es2017 --format=iife --watch",
     "dev": "npm run build",
     "test": "vitest run",
     "test:watch": "vitest",

@@ -22,6 +22,10 @@ import {
   type HistoryEntry,
 } from './profile-history';
 import { syncHistory, saveNote, updateNote, deleteNote, getNotesForContact, type HistoryEntrySync } from './sync';
+import { parseVoyagerProfile, type ExtendedProfileData } from './voyager-api';
+
+// Storage key for intercepted Voyager data
+const INTERCEPTED_DATA_KEY = 'sr_voyager_data';
 
 // AI skills version - bump this to force re-inference for all cached profiles
 const AI_SKILLS_VERSION = 2;
@@ -774,12 +778,53 @@ function closeModals(): void {
 
 /**
  * Extract profile data from the current LinkedIn page
- * Only extracts what's visible on the main profile page - no navigation or background tabs
- * This is safer and complies with LinkedIn's terms of service
+ * Strategy: Try Voyager API intercepted data first (complete, structured),
+ * then fall back to DOM scraping for anything missing
  */
 async function extractProfileData(profileId: string, startTime: number): Promise<Partial<StoredProfile>> {
   console.log('[Social Recall] Starting extraction...');
   updateProgress('expanding', startTime);
+
+  // Try to get data from intercepted Voyager API first
+  const voyagerData = getInterceptedVoyagerData();
+
+  if (voyagerData) {
+    console.log('[Social Recall] Using intercepted Voyager API data (complete, structured)');
+    updateProgress('experience', startTime);
+
+    // Voyager data is our primary source - it has complete employer/education history
+    const profileData: Partial<StoredProfile> = {
+      name: voyagerData.name,
+      headline: voyagerData.headline,
+      location: voyagerData.location,
+      avatarUrl: voyagerData.avatarUrl,
+      about: voyagerData.about,
+      employers: voyagerData.employers,
+      education: voyagerData.education,
+      // Voyager doesn't provide these - fall back to DOM
+      skills: extractSkills(),
+      certifications: extractCertifications(),
+      volunteering: extractVolunteering(),
+      honorsAwards: extractHonorsAwards(),
+      courses: extractCourses(),
+      languages: extractLanguages(),
+      activities: extractActivities(),
+      lastSeen: new Date().toISOString(),
+    };
+
+    console.log('[Social Recall] Voyager extraction complete:', {
+      name: profileData.name,
+      employers: profileData.employers?.length,
+      education: profileData.education?.length,
+      skills: profileData.skills?.length,
+    });
+
+    updateProgress('complete', startTime);
+    return profileData;
+  }
+
+  // Fall back to DOM scraping if no Voyager data available
+  console.log('[Social Recall] No Voyager data, falling back to DOM scraping...');
 
   // Debug: Comprehensive DOM inspection
   try {
@@ -788,7 +833,7 @@ async function extractProfileData(profileId: string, startTime: number): Promise
     console.log('[Social Recall] Debug DOM inspection error:', e);
   }
 
-  console.log('[Social Recall] Extracting profile fields...');
+  console.log('[Social Recall] Extracting profile fields from DOM...');
   updateProgress('experience', startTime);
 
   // Extract all data from the main profile page only (no navigation)
@@ -810,10 +855,7 @@ async function extractProfileData(profileId: string, startTime: number): Promise
     lastSeen: new Date().toISOString(),
   };
 
-  console.log('[Social Recall] Extraction complete, updating progress...');
-  updateProgress('complete', startTime);
-
-  console.log('[Social Recall] Profile data extracted (main page only):', {
+  console.log('[Social Recall] DOM extraction complete:', {
     name: profileData.name,
     employers: profileData.employers?.length,
     education: profileData.education?.length,
@@ -822,6 +864,7 @@ async function extractProfileData(profileId: string, startTime: number): Promise
     volunteering: profileData.volunteering?.length,
   });
 
+  updateProgress('complete', startTime);
   return profileData;
 }
 
@@ -1774,6 +1817,65 @@ function extractActivities(): Activity[] {
 
   console.log(`[Social Recall] Extracted ${activities.length} posts from profile Activity section`);
   return activities;
+}
+
+/**
+ * Get intercepted Voyager API data from sessionStorage
+ * The voyager-interceptor.ts script stores intercepted data here
+ */
+function getInterceptedVoyagerData(): ExtendedProfileData | null {
+  try {
+    const stored = sessionStorage.getItem(INTERCEPTED_DATA_KEY);
+    if (!stored) {
+      console.log('[Social Recall] No intercepted Voyager data found');
+      return null;
+    }
+
+    const dataArray = JSON.parse(stored);
+    if (!Array.isArray(dataArray) || dataArray.length === 0) {
+      return null;
+    }
+
+    // Get the most recent entry
+    const latest = dataArray[dataArray.length - 1];
+    if (!latest?.data) {
+      return null;
+    }
+
+    // Parse the Voyager response
+    const parsed = parseVoyagerProfile(latest.data);
+    if (parsed) {
+      console.log('[Social Recall] Successfully parsed Voyager data:', {
+        name: parsed.name,
+        employers: parsed.employers?.length,
+        education: parsed.education?.length,
+      });
+    }
+    return parsed;
+  } catch (e) {
+    console.error('[Social Recall] Failed to parse intercepted Voyager data:', e);
+    return null;
+  }
+}
+
+/**
+ * Listen for real-time Voyager data interception events
+ * This allows us to get data as soon as it's intercepted without polling sessionStorage
+ */
+function setupVoyagerDataListener(callback: (data: ExtendedProfileData) => void): () => void {
+  const handler = (event: Event) => {
+    const customEvent = event as CustomEvent;
+    if (customEvent.detail) {
+      const parsed = parseVoyagerProfile(customEvent.detail);
+      if (parsed) {
+        console.log('[Social Recall] Real-time Voyager data received');
+        callback(parsed);
+      }
+    }
+  };
+
+  window.addEventListener('voyager-data-intercepted', handler);
+  return () => window.removeEventListener('voyager-data-intercepted', handler);
 }
 
 /**
