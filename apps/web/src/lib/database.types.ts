@@ -284,6 +284,9 @@ export interface DbMasterProfile {
   contributor_count: number;
   update_count: number;
   created_at: string;
+  // AI analysis caching fields (migration 010)
+  verified_at: string | null;
+  ai_analyzed_at: string | null;
 }
 
 export interface DbMasterProfileEmployer {
@@ -299,6 +302,29 @@ export interface DbMasterProfileEmployer {
   last_updated_by: string | null;
   last_updated_at: string;
   created_at: string;
+}
+
+export interface DbMasterProfileAiAnalysis {
+  id: string;
+  master_profile_id: string;
+  archetype: string | null;
+  skills: Record<string, unknown>[] | null;
+  could_be: string[] | null;
+  good_for: string[] | null;
+  ai_model: string;
+  triggered_by_ip: string | null;
+  analyzed_at: string;
+  created_at: string;
+}
+
+export interface DbMasterProfileAiAnalysisInsert {
+  master_profile_id: string;
+  archetype?: string | null;
+  skills?: Record<string, unknown>[] | null;
+  could_be?: string[] | null;
+  good_for?: string[] | null;
+  ai_model: string;
+  triggered_by_ip?: string | null;
 }
 
 export interface DbMasterProfileHistory {
@@ -371,6 +397,8 @@ export interface DbMasterProfileInsert {
   profile_url?: string | null;
   location?: string | null;
   first_contributed_by?: string | null;
+  verified_at?: string | null;
+  ai_analyzed_at?: string | null;
 }
 
 export interface DbMasterProfileEmployerInsert {
@@ -515,6 +543,11 @@ export interface Database {
         Row: DbMasterProfileHistory;
         Insert: never; // Inserted by trigger only
         Update: never;
+      };
+      master_profile_ai_analysis: {
+        Row: DbMasterProfileAiAnalysis;
+        Insert: DbMasterProfileAiAnalysisInsert;
+        Update: Partial<DbMasterProfileAiAnalysisInsert>;
       };
       user_profile_data: {
         Row: DbUserProfileData;
