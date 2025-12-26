@@ -7,12 +7,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { getCorsHeaders } from '@/lib/cors';
+import { getCorsHeadersForOrigin } from '@/lib/cors';
 import { isAnalysisStale } from '@/lib/profile-intelligence';
 
 // CORS preflight
-export async function OPTIONS() {
-  const corsHeaders = getCorsHeaders();
+export async function OPTIONS(request: NextRequest) {
+  const origin = request.headers.get('origin');
+  const corsHeaders = getCorsHeadersForOrigin(origin);
   return new NextResponse(null, { status: 200, headers: corsHeaders });
 }
 
@@ -39,7 +40,8 @@ interface AIAnalysis {
 }
 
 export async function POST(request: NextRequest) {
-  const corsHeaders = getCorsHeaders();
+  const origin = request.headers.get('origin');
+  const corsHeaders = getCorsHeadersForOrigin(origin);
 
   try {
     const body: RequestBody = await request.json();

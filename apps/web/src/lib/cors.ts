@@ -14,6 +14,7 @@ const WEB_ORIGINS = [
   'http://localhost:3000',
   'http://localhost:3001',
   'https://www.socialrecall.now',
+  'https://www.linkedin.com', // Content scripts run in LinkedIn's context
 ] as const;
 
 /**
