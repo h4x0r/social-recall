@@ -136,7 +136,7 @@ describe('inferIntelligence', () => {
       expect(call[0]).toContain('/api/infer-skills');
     });
 
-    it('uses socialrecall.now as default API URL', async () => {
+    it('uses www.socialrecall.now as default API URL', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
@@ -151,7 +151,7 @@ describe('inferIntelligence', () => {
       await inferIntelligence(mockProfile);
 
       const call = mockFetch.mock.calls[0];
-      expect(call[0]).toBe('https://socialrecall.now/api/infer-skills');
+      expect(call[0]).toBe('https://www.socialrecall.now/api/infer-skills');
     });
   });
 

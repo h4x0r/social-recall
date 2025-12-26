@@ -2,6 +2,6 @@
 
 ## Domains
 
-- **Production:** https://socialrecall.now
-- **Privacy Policy:** https://socialrecall.now/privacy
+- **Production:** https://www.socialrecall.now
+- **Privacy Policy:** https://www.socialrecall.now/privacy
 - **Vercel (legacy):** https://social-recall.vercel.app

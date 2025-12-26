@@ -77,7 +77,7 @@ export interface InferenceOptions {
   timeoutMs?: number;
 }
 
-const DEFAULT_API_URL = 'https://socialrecall.now';
+const DEFAULT_API_URL = 'https://www.socialrecall.now';
 const DEFAULT_TIMEOUT_MS = 10000;
 
 /**

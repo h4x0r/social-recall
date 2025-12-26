@@ -13,7 +13,7 @@ export type AuthStatus = (typeof AUTH_STATUS)[keyof typeof AUTH_STATUS];
 // Web app auth URL (matches background.ts origins)
 const WEB_APP_BASE_URL =
   process.env.NODE_ENV === 'production'
-    ? 'https://socialrecall.now'
+    ? 'https://www.socialrecall.now'
     : 'http://localhost:3000';
 
 export const WEB_APP_AUTH_URL = `${WEB_APP_BASE_URL}/auth/extension`;

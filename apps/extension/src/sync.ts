@@ -84,7 +84,7 @@ interface SyncResult {
 }
 
 // Default web app URL (can be configured in settings)
-const DEFAULT_WEB_APP_URL = 'https://socialrecall.now';
+const DEFAULT_WEB_APP_URL = 'https://www.socialrecall.now';
 
 /**
  * Check if extension context is still valid
