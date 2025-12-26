@@ -176,6 +176,17 @@
   letter-spacing: 0.5px;
 }
 
+/* Unverified indicator - muted question mark */
+.sr-panel__unverified {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--sr-cream-dark);
+  opacity: 0.6;
+  cursor: help;
+}
+
 /* Subtitle - headline and location */
 .sr-panel__subtitle {
   background: var(--sr-charcoal);
@@ -929,38 +940,34 @@
   gap: 8px;
 }
 
-.sr-panel__add-note {
-  flex: 1;
-  padding: 10px 16px;
-  background: transparent;
-  border: 1px solid var(--sr-gold);
-  border-radius: 4px;
-  color: var(--sr-gold);
-  font-family: var(--sr-font-body);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: var(--sr-transition);
-}
-
-.sr-panel__add-note:hover {
-  background: var(--sr-gold);
-  color: var(--sr-charcoal);
-}
-
+.sr-panel__add-note,
+.sr-panel__add-introduction,
 .sr-panel__reanalyze {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 1;
   padding: 10px 12px;
   background: transparent;
   border: 1px solid var(--sr-gold);
   border-radius: 4px;
   color: var(--sr-gold);
   font-family: var(--sr-font-body);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   transition: var(--sr-transition);
 }
 
+.sr-panel__add-note svg,
+.sr-panel__add-introduction svg,
+.sr-panel__reanalyze svg {
+  flex-shrink: 0;
+}
+
+.sr-panel__add-note:hover,
+.sr-panel__add-introduction:hover,
 .sr-panel__reanalyze:hover {
   background: var(--sr-gold);
   color: var(--sr-charcoal);
@@ -2058,19 +2065,53 @@
   opacity: 0.85;
 }
 
-/* History Mode - Recent Profiles List */
-.sr-panel__history {
+/* History Mode - Recent Profiles List (matches popup styling) */
+.sr-panel__body.sr-panel__history {
+  background: var(--sr-charcoal-light);
+  padding: 12px 16px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+/* Custom scrollbar for history section */
+.sr-panel__body.sr-panel__history::-webkit-scrollbar {
+  width: 4px;
+}
+
+.sr-panel__body.sr-panel__history::-webkit-scrollbar-track {
+  background: var(--sr-charcoal);
+}
+
+.sr-panel__body.sr-panel__history::-webkit-scrollbar-thumb {
+  background: var(--sr-gold-dark);
+  border-radius: 2px;
+}
+
+/* Section header with RECENT label (matches popup) */
+.sr-panel__history-header {
+  margin-bottom: 10px;
+}
+
+.sr-panel__history-label {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--sr-gold);
+}
+
+/* History list container */
+.sr-panel__history-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 8px 0;
 }
 
 .sr-panel__history-item {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 8px 10px;
   background: var(--sr-charcoal);
   border-radius: 6px;
   border: 1px solid rgba(201, 162, 39, 0.2);
@@ -2081,20 +2122,19 @@
 .sr-panel__history-item:hover {
   border-color: var(--sr-gold);
   background: rgba(201, 162, 39, 0.1);
-  transform: translateX(4px);
 }
 
 .sr-panel__history-avatar {
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
   border-radius: 50%;
   background: var(--sr-charcoal-light);
-  border: 2px solid var(--sr-gold);
+  border: 1px solid var(--sr-gold);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 12px;
   color: var(--sr-gold);
   overflow: hidden;
   flex-shrink: 0;
@@ -2112,21 +2152,22 @@
 }
 
 .sr-panel__history-name {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 500;
   color: var(--sr-text-light);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-bottom: 2px;
+  line-height: 1.3;
 }
 
 .sr-panel__history-meta {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--sr-text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1.3;
 }
 
 .sr-panel__history-time {
@@ -2139,7 +2180,7 @@
   text-align: center;
   padding: 24px 16px;
   color: var(--sr-text-muted);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .sr-panel__history-empty p {
@@ -2324,22 +2365,6 @@
 .sr-panel__intro-value {
   font-size: 13px;
   color: var(--sr-charcoal);
-}
-
-.sr-panel__add-introduction {
-  background: transparent;
-  border: 1px dashed var(--sr-text-muted);
-  color: var(--sr-text-muted);
-  padding: 6px 12px;
-  border-radius: 4px;
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.sr-panel__add-introduction:hover {
-  border-color: var(--sr-gold);
-  color: var(--sr-gold);
 }
 
 /* Introduction Form */

@@ -92,8 +92,50 @@ export function setupContextMenu(): void {
   });
 }
 
+/**
+ * Set up listener for SPA navigation on LinkedIn
+ * Uses webNavigation API which is more reliable than content script interception
+ */
+export function setupNavigationListener(): void {
+  // Listen for SPA navigation (history.pushState/replaceState)
+  chrome.webNavigation.onHistoryStateUpdated.addListener(
+    (details) => {
+      // Only handle main frame navigation
+      if (details.frameId !== 0) return;
+
+      console.log('[Social Recall BG] SPA navigation detected:', details.url);
+
+      // Send message to content script
+      chrome.tabs.sendMessage(details.tabId, {
+        type: 'URL_CHANGED',
+        url: details.url,
+      }).catch(() => {
+        // Content script might not be ready yet, ignore errors
+      });
+    },
+    { url: [{ hostContains: 'linkedin.com' }] }
+  );
+
+  console.log('[Social Recall BG] Navigation listener set up');
+}
+
+/**
+ * Enable silent auto-update when new version is available
+ */
+function setupAutoUpdate(): void {
+  chrome.runtime.onUpdateAvailable.addListener(() => {
+    console.log('[Social Recall BG] Update available, reloading...');
+    chrome.runtime.reload();
+  });
+}
+
 // Auto-initialize when running in browser (not in tests)
 if (typeof chrome !== 'undefined' && chrome.runtime?.onMessageExternal) {
   setupAuthListener();
   setupContextMenu();
+  setupAutoUpdate();
+  // webNavigation may not be available in all contexts
+  if (chrome.webNavigation?.onHistoryStateUpdated) {
+    setupNavigationListener();
+  }
 }

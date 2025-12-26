@@ -6,23 +6,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { createContactRepository } from '@/lib/contact-repository';
-import { createContactSyncService, ExtensionContactData } from '@/lib/contact-sync';
+import { createContactSyncService } from '@/lib/contact-sync';
 import type { Database } from '@/lib/database.types';
-
-// CORS headers for extension requests
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*', // In production, restrict to extension ID
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-};
+import { syncBatchSchema, validateInput } from '@/lib/api-validation';
+import { getCorsHeaders } from '@/lib/cors';
+import { checkRateLimit } from '@/lib/rate-limiter';
 
 // Handle CORS preflight
 export async function OPTIONS() {
+  const corsHeaders = getCorsHeaders();
   return new NextResponse(null, { status: 200, headers: corsHeaders });
 }
 
 // Sync contacts from extension
 export async function POST(request: NextRequest) {
+  const corsHeaders = getCorsHeaders();
+
+  // Check rate limit first
+  const rateLimitResponse = checkRateLimit(request, 'sync');
+  if (rateLimitResponse) return rateLimitResponse;
+
   try {
     // Get auth token from header
     const authHeader = request.headers.get('Authorization');
@@ -57,22 +60,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Parse request body
+    // Parse and validate request body
     const body = await request.json();
-
-    // Support both single contact and batch
-    const contacts: ExtensionContactData[] = Array.isArray(body.contacts)
-      ? body.contacts
-      : body.contact
-        ? [body.contact]
-        : [];
-
-    if (contacts.length === 0) {
+    const validation = validateInput(syncBatchSchema, body);
+    if (!validation.success) {
       return NextResponse.json(
-        { error: 'No contacts provided. Send { contact: {...} } or { contacts: [...] }' },
+        { error: validation.error },
         { status: 400, headers: corsHeaders }
       );
     }
+
+    // Extract contacts from validated data
+    const contacts = validation.data.contacts || (validation.data.contact ? [validation.data.contact] : []);
 
     // Create repository and sync service
     const repository = createContactRepository(supabase);

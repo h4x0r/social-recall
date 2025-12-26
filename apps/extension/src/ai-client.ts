@@ -66,6 +66,12 @@ export interface IntelligenceResult {
   error?: string;
 }
 
+export interface CachedIntelligenceResult extends IntelligenceResult {
+  verified?: boolean;
+  cached?: boolean;
+  analyzed_at?: string;
+}
+
 export interface InferenceOptions {
   apiUrl?: string;
   timeoutMs?: number;
@@ -145,6 +151,77 @@ export async function inferIntelligence(
     return {
       success: false,
       error: 'Unknown error',
+    };
+  }
+}
+
+export interface ProfileIntelligenceOptions extends InferenceOptions {
+  linkedinId: string;
+  fingerprint?: string;
+}
+
+/**
+ * Get profile intelligence with caching support
+ * Uses the new /api/profile-intelligence endpoint for cached results
+ */
+export async function getProfileIntelligence(
+  profile: ProfileData,
+  options: ProfileIntelligenceOptions
+): Promise<CachedIntelligenceResult> {
+  const { apiUrl = DEFAULT_API_URL, timeoutMs = DEFAULT_TIMEOUT_MS, linkedinId, fingerprint } = options;
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(`${apiUrl}/api/profile-intelligence`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        linkedin_id: linkedinId,
+        profile_data: profile,
+        fingerprint,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      return {
+        success: false,
+        error: errorData.error || `API error: ${response.status} ${response.statusText}`,
+      };
+    }
+
+    const data = await response.json();
+
+    return {
+      success: true,
+      skills: data.skills || [],
+      archetype: data.archetype || null,
+      couldBe: data.could_be || [],
+      goodFor: data.good_for || [],
+      verified: data.verified ?? false,
+      cached: data.cached ?? false,
+      analyzed_at: data.analyzed_at,
+    };
+  } catch (error) {
+    clearTimeout(timeoutId);
+
+    if (error instanceof Error && error.name === 'AbortError') {
+      return {
+        success: false,
+        error: 'Request timeout',
+      };
+    }
+
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
     };
   }
 }

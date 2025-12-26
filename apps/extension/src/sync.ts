@@ -6,12 +6,66 @@
 interface Employer {
   company: string;
   logo: string;
+  title?: string;
+  isCurrent?: boolean;
+  startDate?: string;
+  endDate?: string;
+}
+
+interface Education {
+  school: string;
+  degree?: string;
+  field?: string;
+  startDate?: string;
+  endDate?: string;
+}
+
+interface Certification {
+  name: string;
+  issuer?: string;
+  issueDate?: string;
+  expirationDate?: string;
+}
+
+interface Project {
+  name: string;
+  description?: string;
+  url?: string;
+}
+
+interface Publication {
+  title: string;
+  publisher?: string;
+  url?: string;
+  date?: string;
+}
+
+interface Service {
+  name: string;
+  description?: string;
+}
+
+interface Website {
+  label?: string;
+  url: string;
 }
 
 interface SocialNote {
   name: string;
   text: string;
+  headline?: string;
+  location?: string;
+  avatarUrl?: string;
+  about?: string;
   employers?: Employer[];
+  education?: Education[];
+  certifications?: Certification[];
+  skills?: string[];
+  languages?: string[];
+  projects?: Project[];
+  publications?: Publication[];
+  services?: Service[];
+  websites?: Website[];
 }
 
 type SocialNotes = Record<string, SocialNote>;
@@ -33,13 +87,31 @@ interface SyncResult {
 const DEFAULT_WEB_APP_URL = 'https://social-recall.vercel.app';
 
 /**
+ * Check if extension context is still valid
+ */
+function isExtensionContextValid(): boolean {
+  try {
+    return chrome.runtime?.id !== undefined;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Get the configured web app URL
  */
 export async function getWebAppUrl(): Promise<string> {
+  if (!isExtensionContextValid()) {
+    return DEFAULT_WEB_APP_URL;
+  }
   return new Promise((resolve) => {
-    chrome.storage.sync.get(['webAppUrl'], (result: StorageResult) => {
-      resolve(result.webAppUrl || DEFAULT_WEB_APP_URL);
-    });
+    try {
+      chrome.storage.sync.get(['webAppUrl'], (result: StorageResult) => {
+        resolve(result.webAppUrl || DEFAULT_WEB_APP_URL);
+      });
+    } catch {
+      resolve(DEFAULT_WEB_APP_URL);
+    }
   });
 }
 
@@ -47,8 +119,13 @@ export async function getWebAppUrl(): Promise<string> {
  * Set the web app URL
  */
 export async function setWebAppUrl(url: string): Promise<void> {
+  if (!isExtensionContextValid()) return;
   return new Promise((resolve) => {
-    chrome.storage.sync.set({ webAppUrl: url }, resolve);
+    try {
+      chrome.storage.sync.set({ webAppUrl: url }, resolve);
+    } catch {
+      resolve();
+    }
   });
 }
 
@@ -56,10 +133,15 @@ export async function setWebAppUrl(url: string): Promise<void> {
  * Get stored auth token
  */
 export async function getSyncToken(): Promise<string | null> {
+  if (!isExtensionContextValid()) return null;
   return new Promise((resolve) => {
-    chrome.storage.sync.get(['syncToken'], (result: StorageResult) => {
-      resolve(result.syncToken || null);
-    });
+    try {
+      chrome.storage.sync.get(['syncToken'], (result: StorageResult) => {
+        resolve(result.syncToken || null);
+      });
+    } catch {
+      resolve(null);
+    }
   });
 }
 
@@ -67,8 +149,13 @@ export async function getSyncToken(): Promise<string | null> {
  * Store auth token
  */
 export async function setSyncToken(token: string): Promise<void> {
+  if (!isExtensionContextValid()) return;
   return new Promise((resolve) => {
-    chrome.storage.sync.set({ syncToken: token }, resolve);
+    try {
+      chrome.storage.sync.set({ syncToken: token }, resolve);
+    } catch {
+      resolve();
+    }
   });
 }
 
@@ -76,8 +163,13 @@ export async function setSyncToken(token: string): Promise<void> {
  * Clear auth token
  */
 export async function clearSyncToken(): Promise<void> {
+  if (!isExtensionContextValid()) return;
   return new Promise((resolve) => {
-    chrome.storage.sync.remove(['syncToken'], resolve);
+    try {
+      chrome.storage.sync.remove(['syncToken'], resolve);
+    } catch {
+      resolve();
+    }
   });
 }
 
@@ -93,22 +185,67 @@ export async function isLoggedIn(): Promise<boolean> {
  * Get all stored contacts
  */
 export async function getAllContacts(): Promise<SocialNotes> {
+  if (!isExtensionContextValid()) return {};
   return new Promise((resolve) => {
-    chrome.storage.sync.get(['socialNotes'], (result: StorageResult) => {
-      resolve(result.socialNotes || {});
-    });
+    try {
+      chrome.storage.sync.get(['socialNotes'], (result: StorageResult) => {
+        resolve(result.socialNotes || {});
+      });
+    } catch {
+      resolve({});
+    }
   });
 }
 
 /**
  * Transform local contact format to API format
+ * Maps extension-side data structures to backend API format
  */
 function transformContact(profileId: string, note: SocialNote) {
+  // Transform education - map 'dates' to 'startDate'/'endDate' if needed
+  const transformedEducation = (note.education || []).map(edu => ({
+    school: edu.school,
+    degree: edu.degree,
+    field: edu.field,
+    startDate: edu.startDate,
+    endDate: edu.endDate,
+  }));
+
+  // Transform certifications
+  const transformedCertifications = (note.certifications || []).map(cert => ({
+    name: cert.name,
+    issuer: cert.issuer,
+    issueDate: cert.issueDate,
+    expirationDate: cert.expirationDate,
+  }));
+
+  // Transform employers
+  const transformedEmployers = (note.employers || []).map((emp, index) => ({
+    company: emp.company,
+    logo: emp.logo,
+    title: emp.title,
+    isCurrent: emp.isCurrent ?? (index === 0),
+    startDate: emp.startDate,
+    endDate: emp.endDate,
+  }));
+
   return {
     profileId,
     name: note.name,
     url: `https://linkedin.com/in/${profileId}`,
-    employers: note.employers || [],
+    headline: note.headline || undefined,
+    location: note.location || undefined,
+    avatarUrl: note.avatarUrl || undefined,
+    about: note.about || undefined,
+    employers: transformedEmployers,
+    education: transformedEducation,
+    certifications: transformedCertifications,
+    skills: note.skills || [],
+    languages: note.languages || [],
+    projects: note.projects || [],
+    publications: note.publications || [],
+    services: note.services || [],
+    websites: note.websites || [],
     note: note.text || undefined,
   };
 }
@@ -258,6 +395,83 @@ export interface UserInfo {
 }
 
 /**
+ * History entry for syncing
+ */
+export interface HistoryEntrySync {
+  field: 'name' | 'headline' | 'location' | 'employers' | 'education';
+  oldValue: unknown;
+  newValue: unknown;
+  detectedAt: string;
+}
+
+/**
+ * Sync history entries for a contact to backend
+ */
+export async function syncHistory(
+  profileId: string,
+  entries: HistoryEntrySync[]
+): Promise<SyncResult> {
+  const token = await getSyncToken();
+
+  if (!token) {
+    return {
+      success: false,
+      error: 'Not logged in',
+    };
+  }
+
+  if (entries.length === 0) {
+    return { success: true, synced: 0, failed: 0 };
+  }
+
+  const webAppUrl = await getWebAppUrl();
+
+  try {
+    const response = await fetch(`${webAppUrl}/api/contacts/history`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        profileId,
+        entries,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+
+      if (response.status === 401) {
+        await clearSyncToken();
+        return {
+          success: false,
+          error: 'Session expired. Please reconnect to Social Recall.',
+        };
+      }
+
+      return {
+        success: false,
+        error: errorData.error || `History sync failed: ${response.status}`,
+      };
+    }
+
+    const data = await response.json();
+
+    return {
+      success: true,
+      synced: data.result?.synced || 0,
+      failed: data.result?.failed || 0,
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : 'Network error',
+    };
+  }
+}
+
+/**
  * Get current user info from web app
  */
 export async function getUserInfo(): Promise<UserInfo | null> {
@@ -287,5 +501,245 @@ export async function getUserInfo(): Promise<UserInfo | null> {
     return data.user || null;
   } catch (e) {
     return null;
+  }
+}
+
+/**
+ * Note stored in the backend
+ */
+export interface ContactNote {
+  id: string;
+  contact_id: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Save a note for a contact using LinkedIn profile ID
+ */
+export async function saveNote(
+  linkedinId: string,
+  content: string
+): Promise<{ success: boolean; note?: ContactNote; error?: string }> {
+  const token = await getSyncToken();
+
+  if (!token) {
+    return {
+      success: false,
+      error: 'Not logged in. Please connect to Social Recall first.',
+    };
+  }
+
+  const webAppUrl = await getWebAppUrl();
+
+  try {
+    const response = await fetch(`${webAppUrl}/api/contacts/notes`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ linkedinId, content }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+
+      if (response.status === 401) {
+        await clearSyncToken();
+        return {
+          success: false,
+          error: 'Session expired. Please reconnect to Social Recall.',
+        };
+      }
+
+      return {
+        success: false,
+        error: errorData.error || `Failed to save note: ${response.status}`,
+      };
+    }
+
+    const data = await response.json();
+
+    return {
+      success: true,
+      note: data.note,
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : 'Network error',
+    };
+  }
+}
+
+/**
+ * Get notes for a contact using LinkedIn profile ID
+ */
+export async function getNotesForContact(
+  linkedinId: string
+): Promise<{ success: boolean; notes?: ContactNote[]; error?: string }> {
+  const token = await getSyncToken();
+
+  if (!token) {
+    return {
+      success: false,
+      error: 'Not logged in',
+    };
+  }
+
+  const webAppUrl = await getWebAppUrl();
+
+  try {
+    const response = await fetch(`${webAppUrl}/api/contacts/notes?linkedinId=${encodeURIComponent(linkedinId)}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+
+      if (response.status === 401) {
+        await clearSyncToken();
+        return {
+          success: false,
+          error: 'Session expired',
+        };
+      }
+
+      return {
+        success: false,
+        error: errorData.error || `Failed to fetch notes: ${response.status}`,
+      };
+    }
+
+    const data = await response.json();
+
+    return {
+      success: true,
+      notes: data.notes || [],
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : 'Network error',
+    };
+  }
+}
+
+/**
+ * Update an existing note
+ */
+export async function updateNote(
+  noteId: string,
+  content: string
+): Promise<{ success: boolean; note?: ContactNote; error?: string }> {
+  const token = await getSyncToken();
+
+  if (!token) {
+    return {
+      success: false,
+      error: 'Not logged in. Please connect to Social Recall first.',
+    };
+  }
+
+  const webAppUrl = await getWebAppUrl();
+
+  try {
+    const response = await fetch(`${webAppUrl}/api/contacts/notes`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ noteId, content }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+
+      if (response.status === 401) {
+        await clearSyncToken();
+        return {
+          success: false,
+          error: 'Session expired. Please reconnect to Social Recall.',
+        };
+      }
+
+      return {
+        success: false,
+        error: errorData.error || `Failed to update note: ${response.status}`,
+      };
+    }
+
+    const data = await response.json();
+
+    return {
+      success: true,
+      note: data.note,
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : 'Network error',
+    };
+  }
+}
+
+/**
+ * Delete a note
+ */
+export async function deleteNote(
+  noteId: string
+): Promise<{ success: boolean; error?: string }> {
+  const token = await getSyncToken();
+
+  if (!token) {
+    return {
+      success: false,
+      error: 'Not logged in. Please connect to Social Recall first.',
+    };
+  }
+
+  const webAppUrl = await getWebAppUrl();
+
+  try {
+    const response = await fetch(`${webAppUrl}/api/contacts/notes`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ noteId }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+
+      if (response.status === 401) {
+        await clearSyncToken();
+        return {
+          success: false,
+          error: 'Session expired. Please reconnect to Social Recall.',
+        };
+      }
+
+      return {
+        success: false,
+        error: errorData.error || `Failed to delete note: ${response.status}`,
+      };
+    }
+
+    return {
+      success: true,
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : 'Network error',
+    };
   }
 }

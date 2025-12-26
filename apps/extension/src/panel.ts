@@ -137,6 +137,7 @@ export interface ProfileIntelligence {
     previous: string;
   };
   history?: HistoryEntry[];
+  verified?: boolean; // Whether profile data was verified via scraper
 }
 
 export interface Position {
@@ -514,9 +515,14 @@ export function createPanel(container: HTMLElement): Panel {
       ? `<div class="sr-panel__subtitle">${subtitleParts.join(' · ')}</div>`
       : '';
 
+    // Unverified indicator (muted question mark)
+    const unverifiedIndicator = intelligence.verified === false
+      ? '<span class="sr-panel__unverified" title="Profile data from community - not yet verified">?</span>'
+      : '';
+
     content.innerHTML = `
       <div class="sr-panel__header">
-        <span class="sr-panel__name">${intelligence.name}</span>
+        <span class="sr-panel__name">${intelligence.name}</span>${unverifiedIndicator}
         <div class="sr-panel__header-actions">
           <button class="sr-panel__network-graph-btn" title="View network graph">🕸️</button>
           <button class="sr-panel__copy-btn" title="Copy contact info">📋</button>

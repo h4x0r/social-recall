@@ -1,7 +1,7 @@
 # Floating Intelligence Panel Design
 
 **Date:** 2025-12-21
-**Status:** Implemented (TDD, 476 tests passing - 98 extension, 378 web)
+**Status:** Complete (TDD, 711 tests passing - 163 extension, 548 web)
 
 ## Overview
 
@@ -132,23 +132,39 @@ Vercel AI Gateway → Claude Haiku 3.5
 
 ## Test Coverage
 
-**Extension (98 tests):**
+**Extension (163 tests):**
 - Panel creation, toggle, intelligence display
 - Job change alerts
 - Drag functionality
 - AI client with timeout handling
 - Onboarding and gate logic
+- Keyboard shortcuts (m/n/Escape)
+- Profile scraping
+- Notes display from backend
 
-**Web App (378 tests):**
+**Web App (548 tests):**
 - AI inference API
 - Contact management
 - Authentication
 - Sync features
+- Notes API (CRUD operations)
+- Contact consolidation
+- Admin portal
 
 ## Next Steps
 
-1. Add RWS tarot card images to `/tarot/` directory
+1. ~~Add RWS tarot card images to `/tarot/` directory~~ ✓ Done
 2. ~~Implement AI-powered skill inference~~ ✓ Done
-3. Add note input UI to expanded panel
-4. Build sync between extension and web app
-5. Add keyboard shortcuts for power users
+3. ~~Add note input UI to expanded panel~~ ✓ Done
+4. ~~Build sync between extension and web app~~ ✓ Done
+5. ~~Add keyboard shortcuts for power users~~ ✓ Done
+
+### Keyboard Shortcuts (Added 2025-12-23)
+
+| Key | Action |
+|-----|--------|
+| `M` | Toggle minimize/expand panel |
+| `N` | Open note input (when expanded) |
+| `Escape` | Close note input, or minimize panel |
+
+Shortcuts are ignored when typing in input fields or textareas.

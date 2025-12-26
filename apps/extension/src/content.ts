@@ -9,15 +9,27 @@ console.log('[Social Recall] ===== CONTENT SCRIPT STARTING =====');
 
 import { createPanel, Archetype, type ProfileIntelligence, type Panel } from './panel';
 import { extractProfileIdFromUrl, isLinkedInProfileUrl, type Employer } from './utils';
-import { inferIntelligence, type ProfileData as AIProfileData } from './ai-client';
+import { inferIntelligence, getProfileIntelligence, type ProfileData as AIProfileData, type CachedIntelligenceResult } from './ai-client';
 import {
   waitForLinkedInProfile,
   waitForStable,
+  waitForCompleteProfile,
+  observeLazyContent,
 } from './dom-utils';
+import {
+  detectChanges,
+  recordHistory,
+  type HistoryEntry,
+} from './profile-history';
+import { syncHistory, saveNote, updateNote, deleteNote, getNotesForContact, type HistoryEntrySync } from './sync';
+
+// AI skills version - bump this to force re-inference for all cached profiles
+const AI_SKILLS_VERSION = 2;
 
 interface StoredProfile {
   name: string;
   headline?: string;
+  location?: string;
   avatarUrl?: string;
   about?: string;
   employers?: Employer[];
@@ -41,6 +53,9 @@ interface StoredProfile {
   firstSeen: string;
   lastSeen: string;
   note?: string;
+  aiVersion?: number; // Track AI skills version to force re-inference on updates
+  history?: HistoryEntry[]; // Timestamped history of changes to name, headline, location, employers, education
+  verified?: boolean; // Whether profile data was verified via scraper
 }
 
 interface Education {
@@ -133,17 +148,24 @@ function completeExtraction(profileId: string, durationMs: number): void {
     }, 2000);
   }
 
-  // Store timing in local storage history
-  chrome.storage.local.get(['extractionHistory'], (result) => {
-    const history = result.extractionHistory || [];
-    history.unshift({
-      profileId,
-      durationMs,
-      timestamp: Date.now(),
-    });
-    // Keep last 100 entries
-    chrome.storage.local.set({ extractionHistory: history.slice(0, 100) });
-  });
+  // Store timing in local storage history (safely)
+  if (isExtensionContextValid()) {
+    try {
+      chrome.storage.local.get(['extractionHistory'], (result) => {
+        if (!isExtensionContextValid()) return;
+        const history = result.extractionHistory || [];
+        history.unshift({
+          profileId,
+          durationMs,
+          timestamp: Date.now(),
+        });
+        // Keep last 100 entries
+        chrome.storage.local.set({ extractionHistory: history.slice(0, 100) });
+      });
+    } catch (e) {
+      console.log('[Social Recall] Extension context invalidated during history storage');
+    }
+  }
 }
 
 /**
@@ -151,24 +173,37 @@ function completeExtraction(profileId: string, durationMs: number): void {
  */
 async function loadAndShowHistory(): Promise<void> {
   if (!panel) return;
+  if (!isExtensionContextValid()) {
+    console.log('[Social Recall] Extension context invalidated, skipping loadAndShowHistory');
+    return;
+  }
 
   return new Promise((resolve) => {
-    chrome.storage.sync.get(['socialNotes'], (result: StorageData) => {
-      const notes = result.socialNotes || {};
-      const profiles = Object.entries(notes)
-        .map(([profileId, data]) => ({
-          profileId,
-          name: data.name,
-          headline: data.headline,
-          avatarUrl: data.avatarUrl,
-          lastSeen: data.lastSeen || new Date().toISOString(),
-        }))
-        .sort((a, b) => new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime())
-        .slice(0, 10); // Show last 10 profiles
+    try {
+      chrome.storage.sync.get(['socialNotes'], (result: StorageData) => {
+        if (!isExtensionContextValid()) {
+          resolve();
+          return;
+        }
+        const notes = result.socialNotes || {};
+        const profiles = Object.entries(notes)
+          .map(([profileId, data]) => ({
+            profileId,
+            name: data.name,
+            headline: data.headline,
+            avatarUrl: data.avatarUrl,
+            lastSeen: data.lastSeen || new Date().toISOString(),
+          }))
+          .sort((a, b) => new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime())
+          .slice(0, 10); // Show last 10 profiles
 
-      panel.showHistory(profiles);
+        panel?.showHistory(profiles);
+        resolve();
+      });
+    } catch (e) {
+      console.log('[Social Recall] Extension context invalidated during loadAndShowHistory');
       resolve();
-    });
+    }
   });
 }
 
@@ -187,12 +222,84 @@ function initialize(): void {
   panel = createPanel(document.body);
   console.log('[Social Recall] Panel created:', panel?.element);
 
+  // Setup re-analyze callback
+  panel.onReanalyze(() => {
+    console.log('[Social Recall] Re-analyze requested');
+    forceReanalyze();
+  });
+
+  // Setup add note callback
+  panel.onAddNote(async (content: string) => {
+    if (!currentProfileId) {
+      return { success: false, error: 'No profile loaded' };
+    }
+    console.log('[Social Recall] Saving note for:', currentProfileId);
+    const result = await saveNote(currentProfileId, content);
+    if (result.success) {
+      console.log('[Social Recall] Note saved successfully');
+      // Refresh notes display
+      const notesResult = await getNotesForContact(currentProfileId);
+      if (notesResult.success && notesResult.notes && panel) {
+        panel.setNotes(notesResult.notes);
+      }
+    } else {
+      console.log('[Social Recall] Failed to save note:', result.error);
+    }
+    return result;
+  });
+
+  // Setup edit note callback
+  panel.onEditNote(async (noteId: string, content: string) => {
+    if (!currentProfileId) {
+      return { success: false, error: 'No profile loaded' };
+    }
+    console.log('[Social Recall] Updating note:', noteId);
+    const result = await updateNote(noteId, content);
+    if (result.success) {
+      console.log('[Social Recall] Note updated successfully');
+      // Refresh notes display
+      const notesResult = await getNotesForContact(currentProfileId);
+      if (notesResult.success && notesResult.notes && panel) {
+        panel.setNotes(notesResult.notes);
+      }
+    } else {
+      console.log('[Social Recall] Failed to update note:', result.error);
+    }
+    return result;
+  });
+
+  // Setup delete note callback
+  panel.onDeleteNote(async (noteId: string) => {
+    if (!currentProfileId) {
+      return { success: false, error: 'No profile loaded' };
+    }
+    console.log('[Social Recall] Deleting note:', noteId);
+    const result = await deleteNote(noteId);
+    if (result.success) {
+      console.log('[Social Recall] Note deleted successfully');
+      // Refresh notes display
+      const notesResult = await getNotesForContact(currentProfileId);
+      if (notesResult.success && notesResult.notes && panel) {
+        panel.setNotes(notesResult.notes);
+      }
+    } else {
+      console.log('[Social Recall] Failed to delete note:', result.error);
+    }
+    return result;
+  });
+
   // Setup drag functionality
   setupDragListeners();
 
   // If on profile page, extract and display profile intelligence
   if (isLinkedInProfileUrl(window.location.href)) {
     console.log('[Social Recall] On profile page, extracting intelligence...');
+    // Switch to profile mode (clears any history content and prepares for profile data)
+    if (panel) {
+      panel.setMinimalMode(false);
+    }
+    // Prime immediately, then extract fully
+    primePanel();
     handleProfilePage();
   } else {
     console.log('[Social Recall] Not a profile page, showing history mode');
@@ -205,6 +312,27 @@ function initialize(): void {
 
   // Listen for URL changes (LinkedIn is a SPA)
   observeUrlChanges();
+
+  // Listen for URL change messages from background script (more reliable for SPA)
+  let lastHandledUrl = window.location.href;
+  if (isExtensionContextValid()) {
+    try {
+      chrome.runtime.onMessage.addListener((message) => {
+        if (!isExtensionContextValid()) return;
+        if (message.type === 'URL_CHANGED') {
+          console.log('[Social Recall] URL change message from background:', message.url);
+          // Only handle if URL is different from last handled
+          if (message.url !== lastHandledUrl) {
+            const oldUrl = lastHandledUrl;
+            lastHandledUrl = message.url;
+            handleUrlChange(message.url, oldUrl);
+          }
+        }
+      });
+    } catch (e) {
+      console.log('[Social Recall] Extension context invalidated, cannot add message listener');
+    }
+  }
 }
 
 /**
@@ -215,11 +343,20 @@ function injectStyles(): void {
     return;
   }
 
-  const link = document.createElement('link');
-  link.id = 'sr-panel-styles';
-  link.rel = 'stylesheet';
-  link.href = chrome.runtime.getURL('panel.css');
-  document.head.appendChild(link);
+  if (!isExtensionContextValid()) {
+    console.log('[Social Recall] Extension context invalidated, skipping style injection');
+    return;
+  }
+
+  try {
+    const link = document.createElement('link');
+    link.id = 'sr-panel-styles';
+    link.rel = 'stylesheet';
+    link.href = chrome.runtime.getURL('panel.css');
+    document.head.appendChild(link);
+  } catch (e) {
+    console.log('[Social Recall] Extension context invalidated during style injection');
+  }
 }
 
 /**
@@ -268,7 +405,12 @@ function setupDragListeners(): void {
  * Save panel position to storage
  */
 function savePosition(position: { x: number; y: number }): void {
-  chrome.storage.sync.set({ panelPosition: position });
+  if (!isExtensionContextValid()) return;
+  try {
+    chrome.storage.sync.set({ panelPosition: position });
+  } catch (e) {
+    console.log('[Social Recall] Extension context invalidated during savePosition');
+  }
 }
 
 /**
@@ -324,6 +466,74 @@ async function warmUpAI(): Promise<void> {
 }
 
 /**
+ * Prime the panel with the profile name, title, and location immediately (before full extraction)
+ */
+function primePanel(): void {
+  if (!panel) return;
+
+  // Try to get the name from the H1 element quickly
+  const h1 = document.querySelector('h1');
+  const name = h1?.textContent?.trim() || 'Loading...';
+
+  // Try to get avatar URL
+  const avatarImg = document.querySelector('img.pv-top-card-profile-picture__image') as HTMLImageElement;
+  const avatarUrl = avatarImg?.src;
+
+  // Try to get headline (title)
+  const headlineEl = document.querySelector('.text-body-medium.break-words');
+  const headline = headlineEl?.textContent?.trim();
+
+  // Try to get location
+  const locationSelectors = [
+    '.pv-text-details__left-panel span.text-body-small',
+    '.text-body-small.inline.t-black--light.break-words',
+  ];
+  let location: string | undefined;
+  for (const selector of locationSelectors) {
+    const el = document.querySelector(selector);
+    const text = el?.textContent?.trim();
+    if (text && text.length > 2 && text.length < 100 && !/^\d+[\d,]*\s*(connections?|followers?)$/i.test(text)) {
+      location = text;
+      break;
+    }
+  }
+
+  console.log('[Social Recall] Priming panel with name:', name, 'headline:', headline, 'location:', location);
+  panel.primeForProfile(name, headline, location, avatarUrl);
+}
+
+/**
+ * Force re-analysis of the current profile by clearing cached AI data
+ */
+async function forceReanalyze(): Promise<void> {
+  if (!currentProfileId) {
+    console.log('[Social Recall] No current profile to re-analyze');
+    return;
+  }
+
+  console.log('[Social Recall] Forcing re-analysis for:', currentProfileId);
+
+  // Clear the aiVersion to force re-inference
+  const storageKey = `profile:${currentProfileId}`;
+  const result = await chrome.storage.local.get(storageKey);
+  const storedData = result[storageKey] as StoredProfile | undefined;
+
+  if (storedData) {
+    // Remove aiVersion to trigger re-inference
+    delete storedData.aiVersion;
+    await chrome.storage.local.set({ [storageKey]: storedData });
+    console.log('[Social Recall] Cleared aiVersion, re-running extraction');
+  }
+
+  // Reset current profile ID to allow re-extraction
+  const profileId = currentProfileId;
+  currentProfileId = null;
+
+  // Re-run extraction
+  await handleProfilePage();
+}
+
+/**
  * Handle LinkedIn profile page - extract data and update panel
  */
 async function handleProfilePage(): Promise<void> {
@@ -350,8 +560,8 @@ async function handleProfilePage(): Promise<void> {
     panel.setPosition(savedPosition.x, savedPosition.y);
   }
 
-  // Use Playwright-like waiting for profile to load
-  await waitForLinkedInProfile({ timeout: 30000 });
+  // Wait for visible content to load (NO auto-scrolling - respects user control)
+  await waitForCompleteProfile({ timeout: 15000 });
 
   // Re-check context validity after wait
   if (!isExtensionContextValid()) {
@@ -360,14 +570,20 @@ async function handleProfilePage(): Promise<void> {
   }
 
   // Extract profile data from page (includes background activity fetch)
-  const profileData = await extractProfileData(profileId, startTime);
+  let profileData = await extractProfileData(profileId, startTime);
+
+  // Check if we're still on the same profile after extraction
+  if (profileId !== currentProfileId) {
+    console.log('[Social Recall] Profile changed during extraction, aborting:', profileId);
+    return;
+  }
 
   // Get stored data for this profile
   const storedData = await getStoredProfile(profileId);
 
   // Merge and save (Robocop mode - auto-capture with AI intelligence)
   updateProgress('ai', startTime);
-  const mergedData = await mergeProfileData(profileData, storedData);
+  let mergedData = await mergeProfileData(profileData, storedData);
   await saveProfile(profileId, mergedData);
 
   // Mark extraction complete
@@ -379,8 +595,15 @@ async function handleProfilePage(): Promise<void> {
   const jobChange = detectJobChange(profileData, storedData);
 
   // Build intelligence object
-  const intelligence = buildIntelligence(mergedData, jobChange);
+  let intelligence = buildIntelligence(mergedData, jobChange);
   console.log('[Social Recall] Intelligence built:', JSON.stringify(intelligence, null, 2));
+
+  // Check if we're still on the same profile (race condition guard)
+  // User may have navigated away during extraction
+  if (profileId !== currentProfileId) {
+    console.log('[Social Recall] Profile changed during extraction, discarding results for:', profileId);
+    return;
+  }
 
   // Update panel
   if (panel) {
@@ -393,7 +616,65 @@ async function handleProfilePage(): Promise<void> {
     if (jobChange && orb) {
       orb.classList.add('sr-panel__orb--alert');
     }
+
+    // Fetch and display notes from backend
+    if (currentProfileId) {
+      // Show loading state
+      panel.setNotesLoading(true);
+
+      getNotesForContact(currentProfileId).then(result => {
+        if (result.success && result.notes && panel) {
+          console.log(`[Social Recall] Loaded ${result.notes.length} notes from backend`);
+          panel.setNotes(result.notes);
+        } else if (!result.success) {
+          console.log('[Social Recall] Failed to load notes:', result.error);
+          // Show empty notes section even if fetch fails
+          panel?.setNotes([]);
+        }
+      }).catch(err => {
+        console.log('[Social Recall] Error fetching notes:', err);
+        panel?.setNotes([]);
+      });
+    }
   }
+
+  // Set up observer for lazy-loaded content (when user scrolls)
+  // Re-extracts and merges data when new content appears
+  const stopObserving = observeLazyContent(async () => {
+    if (profileId !== currentProfileId || !panel) return;
+
+    console.log('[Social Recall] Lazy content detected, re-extracting...');
+
+    // Re-extract with new visible content
+    const newProfileData = await extractProfileData(profileId, Date.now());
+    if (profileId !== currentProfileId) return;
+
+    // Check if we found new employers
+    const oldEmployerCount = mergedData.employers?.length ?? 0;
+    const newEmployerCount = newProfileData.employers?.length ?? 0;
+
+    if (newEmployerCount > oldEmployerCount) {
+      console.log(`[Social Recall] Found ${newEmployerCount - oldEmployerCount} new employers`);
+
+      // Merge new data
+      mergedData = await mergeProfileData(newProfileData, mergedData);
+      await saveProfile(profileId, mergedData);
+
+      // Update intelligence and panel
+      intelligence = buildIntelligence(mergedData, jobChange);
+      panel.setIntelligence(intelligence);
+    }
+  });
+
+  // Clean up observer when profile changes
+  const originalProfileId = profileId;
+  const checkInterval = setInterval(() => {
+    if (currentProfileId !== originalProfileId) {
+      console.log('[Social Recall] Profile changed, stopping lazy content observer');
+      stopObserving();
+      clearInterval(checkInterval);
+    }
+  }, 1000);
 }
 
 /**
@@ -514,6 +795,7 @@ async function extractProfileData(profileId: string, startTime: number): Promise
   const profileData: Partial<StoredProfile> = {
     name: extractName(),
     headline: extractHeadline(),
+    location: extractLocation(),
     avatarUrl: extractAvatarUrl(),
     about: extractAbout(),
     employers: extractEmployers(),
@@ -580,6 +862,42 @@ function extractName(): string {
 function extractHeadline(): string | undefined {
   const headlineEl = document.querySelector('.text-body-medium.break-words');
   return headlineEl?.textContent?.trim();
+}
+
+function extractLocation(): string | undefined {
+  // LinkedIn shows location in the profile header, usually after headline
+  // Try various selectors LinkedIn uses for location
+  const selectors = [
+    // Primary location text
+    '.pv-text-details__left-panel span.text-body-small',
+    '.text-body-small.inline.t-black--light.break-words',
+    // Location in profile card
+    '.pv-top-card--list.pv-top-card--list-bullet li:nth-child(1)',
+    // Alternative profile structure
+    'span[class*="text-body-small"][class*="t-black--light"]',
+  ];
+
+  for (const selector of selectors) {
+    const elements = document.querySelectorAll(selector);
+    for (const el of elements) {
+      const text = el.textContent?.trim();
+      // Location text is typically not too long and doesn't contain certain patterns
+      if (text && text.length > 2 && text.length < 100) {
+        // Skip if it looks like a connection count or follower count
+        if (/^\d+[\d,]*\s*(connections?|followers?)$/i.test(text)) continue;
+        // Skip if it's a pronoun indicator
+        if (/^\([^)]+\)$/.test(text)) continue;
+        // Skip if it looks like a link text
+        if (text.includes('linkedin.com')) continue;
+        // Location often contains a comma (City, State/Country) or is a single place
+        console.log('[Social Recall] Found location:', text);
+        return text;
+      }
+    }
+  }
+
+  console.log('[Social Recall] Location not found');
+  return undefined;
 }
 
 function extractAvatarUrl(): string | undefined {
@@ -889,57 +1207,59 @@ function extractEmployers(): Employer[] {
 }
 
 function extractCompanyNameFromExperience(container: Element): string | null {
-  // In LinkedIn's experience entries:
-  // - Job title is in bold (t-bold)
-  // - Company name is in t-14 t-normal, often with " · Full-time" suffix
-  // We want the company name, not the job title
+  // LinkedIn's experience entry structure (based on DOM analysis):
+  // 1. Company name (first substantial text, often NOT in bold)
+  // 2. Tenure duration (e.g., "17 yrs 1 mo")
+  // 3. Job title (often in bold)
+  // 4. Date range with duration (e.g., "Jul 2020 - Present · 5 yrs 6 mos")
 
   const spans = container.querySelectorAll('span[aria-hidden="true"]');
-  const texts: string[] = [];
 
+  // Patterns to skip
+  const datePattern = /^\w{3} \d{4}|^\d{4}|Present|\d+\s*(yr|yrs|mo|mos|year|month)/i;
+  const locationPattern = /^(Remote|Hybrid|On-site)$|,\s*(Remote|Hybrid|On-site)$/i;
+  const jobTitlePattern = /^(founder|co-founder|ceo|cto|cfo|coo|president|director|manager|lead|senior|junior|engineer|developer|analyst|consultant|specialist|coordinator|associate|intern|head of|vp|vice|chairman|co-chair|partner|advisor|member|board|investor|founding|executive|chief|general|principal|owner|creator|author|host|producer|coach|mentor|speaker|ambassador|evangelist|advocate)/i;
+
+  // Look for company name patterns
   for (const span of spans) {
     const text = span.textContent?.trim();
-    if (!text || text.length < 2) continue;
+    if (!text || text.length < 2 || text.length > 100) continue;
 
-    // Skip date-like text
-    if (/^\w{3} \d{4}/.test(text) || /^\d{4}/.test(text) || text.includes('Present')) continue;
-    if (/^\d+\s*(yr|yrs|mo|mos|year|years|month|months)/.test(text)) continue;
+    // Skip if it looks like a date or tenure
+    if (datePattern.test(text)) continue;
+    if (text.includes(' · ') && /\d+\s*(yr|mo)/i.test(text)) continue; // "Jul 2020 - Present · 5 yrs"
 
-    // Skip location text (City, State/Country format)
-    if (/^[A-Z][a-z]+.*,.*\s*(Remote|Hybrid|On-site)$/i.test(text)) continue;
-    if (/^(Remote|Hybrid|On-site)$/i.test(text)) continue;
+    // Skip location
+    if (locationPattern.test(text)) continue;
 
-    // Skip skills text
-    if (text.includes('skills') || text.includes('Penetration') || text.includes('Security and')) continue;
+    // Skip job titles
+    if (jobTitlePattern.test(text)) continue;
 
-    texts.push(text);
-  }
+    // Skip generic text
+    if (text === 'Experience' || text === 'Skills' || text.includes('endorsement')) continue;
 
-  // Look for company name pattern - typically contains " · " with employment type
-  for (const text of texts) {
+    // Skip description text (usually longer)
+    if (text.length > 80) continue;
+
+    // Company name with employment type: "NEVERHACK Estonia · Full-time"
     if (text.includes(' · ')) {
-      // "NEVERHACK Estonia · Full-time" -> "NEVERHACK Estonia"
-      // "Covert Security · Self-employed" -> "Covert Security"
       const parts = text.split(' · ');
-      const company = parts[0].trim();
-      // Make sure it's not a job title (job titles don't usually have · suffix)
-      if (company.length > 2 && company.length < 80) {
-        return company;
+      const employmentTypes = ['full-time', 'part-time', 'contract', 'freelance', 'self-employed', 'internship', 'apprenticeship', 'seasonal'];
+      const secondPart = parts[1]?.toLowerCase() || '';
+      if (employmentTypes.some(type => secondPart.includes(type))) {
+        const company = parts[0].trim();
+        if (company.length > 2 && company.length < 80) {
+          return company;
+        }
       }
     }
-  }
 
-  // Fallback: look for text that looks like a company (not a job title)
-  // Job titles typically start with specific words
-  const jobTitlePatterns = /^(founder|ceo|cto|cfo|coo|president|director|manager|lead|senior|junior|engineer|developer|analyst|consultant|specialist|coordinator|associate|intern|head of|vp|vice)/i;
-
-  for (const text of texts) {
-    if (text.length > 2 && text.length < 80) {
-      // Skip job titles
-      if (jobTitlePatterns.test(text)) continue;
-      // Skip if it contains common job title words
-      if (/\b(and|of|at)\b/i.test(text) && text.split(' ').length <= 4) continue;
-
+    // Standalone company name - check if it's likely a company
+    // Companies often: have capital letters, are 2-5 words, don't start with job title words
+    const words = text.split(/\s+/);
+    if (words.length >= 1 && words.length <= 8) {
+      // If we've reached here, this is likely a company name
+      // (it's not a date, location, or job title)
       return text;
     }
   }
@@ -1541,6 +1861,7 @@ function mergeProfileDataSync(
     return {
       name: newData.name || 'Unknown',
       headline: newData.headline,
+      location: newData.location,
       avatarUrl: newData.avatarUrl,
       about: newData.about,
       employers: newData.employers,
@@ -1574,6 +1895,7 @@ function mergeProfileDataSync(
     ...storedData,
     name: newData.name || storedData.name,
     headline: newData.headline || storedData.headline,
+    location: newData.location || storedData.location,
     avatarUrl: newData.avatarUrl || storedData.avatarUrl,
     about: newData.about || storedData.about,
     employers: newData.employers || storedData.employers,
@@ -1626,19 +1948,55 @@ async function mergeProfileData(
   const now = new Date().toISOString();
   console.log('[Social Recall] mergeProfileData called, storedData:', storedData ? 'exists' : 'null');
 
-  // If we already have stored data with a VALID archetype AND real intelligence data, just update profile data
+  // Detect changes if we have stored data
+  let historyUpdates: HistoryEntry[] = [];
+  if (storedData) {
+    const changes = detectChanges(storedData, newData);
+    if (changes.length > 0) {
+      console.log('[Social Recall] Detected changes:', changes.map(c => c.field));
+      const withHistory = recordHistory(storedData, changes, now);
+      historyUpdates = withHistory.history || [];
+
+      // Sync new history entries to backend (fire and forget)
+      const profileId = extractProfileIdFromUrl(window.location.href);
+      if (profileId) {
+        const newEntries: HistoryEntrySync[] = changes.map(change => ({
+          field: change.field,
+          oldValue: change.oldValue,
+          newValue: change.newValue,
+          detectedAt: now,
+        }));
+        syncHistory(profileId, newEntries).then(result => {
+          if (result.success) {
+            console.log('[Social Recall] History synced to backend:', result.synced);
+          } else {
+            console.log('[Social Recall] History sync failed:', result.error);
+          }
+        }).catch(err => {
+          console.log('[Social Recall] History sync error:', err);
+        });
+      }
+    } else {
+      historyUpdates = storedData.history || [];
+    }
+  }
+
+  // If we already have stored data with a VALID archetype AND real AI-derived intelligence, just update profile data
   // Old archetypes from previous versions are invalidated and recomputed
   // Also re-run AI if archetype is "unknown" with no real skills (likely a previous failure)
+  // Check aiVersion to force re-inference when AI logic changes
   const hasRealIntelligence = storedData?.skills?.length &&
     storedData.skills[0] !== 'Professional' &&
-    storedData.archetype !== Archetype.Unknown;
+    storedData.archetype !== Archetype.Unknown &&
+    storedData.aiVersion === AI_SKILLS_VERSION; // Must match current AI version
 
   if (storedData && isValidArchetype(storedData.archetype) && hasRealIntelligence) {
-    console.log('[Social Recall] Using stored data with valid archetype:', storedData.archetype);
+    console.log('[Social Recall] Using stored data with valid archetype:', storedData.archetype, 'aiVersion:', storedData.aiVersion);
     return {
       ...storedData,
       name: newData.name || storedData.name,
       headline: newData.headline || storedData.headline,
+      location: newData.location || storedData.location,
       avatarUrl: newData.avatarUrl || storedData.avatarUrl,
       about: newData.about || storedData.about,
       employers: newData.employers || storedData.employers,
@@ -1650,6 +2008,7 @@ async function mergeProfileData(
       certifications: newData.certifications || storedData.certifications,
       activities: newData.activities || storedData.activities,
       lastSeen: now,
+      history: historyUpdates.length > 0 ? historyUpdates : storedData.history,
     };
   }
 
@@ -1673,9 +2032,21 @@ async function mergeProfileData(
 
   try {
     const apiUrl = await getApiUrl();
+    const linkedinId = extractProfileIdFromUrl(window.location.href);
     console.log('[Social Recall] Calling AI inference at:', apiUrl);
     console.log('[Social Recall] Profile data being sent:', JSON.stringify(aiProfileData, null, 2));
-    const result = await inferIntelligence(aiProfileData, { apiUrl, timeoutMs: 15000 });
+
+    // Use the new caching endpoint if we have a linkedin_id, otherwise fall back to direct inference
+    let result: CachedIntelligenceResult;
+    if (linkedinId) {
+      result = await getProfileIntelligence(aiProfileData, { apiUrl, timeoutMs: 15000, linkedinId });
+      console.log('[Social Recall] AI result cached:', result.cached);
+      console.log('[Social Recall] AI result verified:', result.verified);
+    } else {
+      // Fall back to direct inference if we can't get the linkedin_id
+      const fallbackResult = await inferIntelligence(aiProfileData, { apiUrl, timeoutMs: 15000 });
+      result = { ...fallbackResult, cached: false, verified: false };
+    }
     console.log('[Social Recall] AI result success:', result?.success);
     console.log('[Social Recall] AI result archetype:', result?.archetype);
     console.log('[Social Recall] AI result skills:', result?.skills);
@@ -1701,6 +2072,7 @@ async function mergeProfileData(
       return {
         name: newData.name || 'Unknown',
         headline: newData.headline,
+        location: newData.location,
         avatarUrl: newData.avatarUrl,
         about: newData.about,
         employers: newData.employers,
@@ -1720,19 +2092,26 @@ async function mergeProfileData(
         firstSeen: storedData?.firstSeen || now,
         lastSeen: now,
         archetype: archetypeMap[result.archetype] || Archetype.Unknown,
-        // Prefer scraped skills from page, fall back to AI skills, then empty
-        skills: newData.skills?.length ? newData.skills : (result.skills?.map(s => s.name) || []),
+        // Use AI-derived skills, fall back to scraped skills if AI returns none
+        skills: result.skills?.length ? result.skills.map(s => s.name) : (newData.skills || []),
         couldBe: result.couldBe || inferCouldBe(newData),
         goodFor: result.goodFor || inferGoodFor(newData),
         note: storedData?.note,
+        aiVersion: AI_SKILLS_VERSION, // Mark as AI-generated with current version
+        history: historyUpdates.length > 0 ? historyUpdates : storedData?.history,
+        verified: result.verified ?? false,
       };
     }
   } catch (error) {
     console.log('[Social Recall] AI inference failed, using local heuristics:', error);
   }
 
-  // Fallback to local heuristics
-  return mergeProfileDataSync(newData, storedData);
+  // Fallback to local heuristics - pass history updates
+  const syncResult = mergeProfileDataSync(newData, storedData);
+  if (historyUpdates.length > 0) {
+    syncResult.history = historyUpdates;
+  }
+  return syncResult;
 }
 
 /**
@@ -1797,6 +2176,8 @@ function buildIntelligence(
 ): ProfileIntelligence {
   return {
     name: data.name,
+    headline: data.headline,
+    location: data.location,
     avatarUrl: data.avatarUrl,
     archetype: data.archetype || Archetype.Unknown,
     // Use defaults if arrays are empty or missing
@@ -1805,40 +2186,91 @@ function buildIntelligence(
     goodFor: data.goodFor?.length ? data.goodFor : ['Projects'],
     firstSeen: data.firstSeen ? new Date(data.firstSeen) : undefined,
     jobChange,
+    history: data.history,
+    verified: data.verified,
   };
 }
 
 /**
+ * Handle URL change - called when navigation is detected
+ */
+function handleUrlChange(newUrl: string, lastUrl: string): void {
+  if (newUrl === lastUrl) return;
+
+  console.log('[Social Recall] URL changed from', lastUrl, 'to', newUrl);
+  currentProfileId = null;
+
+  if (isLinkedInProfileUrl(newUrl)) {
+    console.log('[Social Recall] Navigated to profile page');
+    // Switch to full mode and extract intelligence
+    if (panel) {
+      panel.setMinimalMode(false);
+      // Prime the panel immediately with whatever name we can find
+      primePanel();
+    }
+    // Small delay to let page content load
+    setTimeout(() => handleProfilePage(), 500);
+  } else {
+    console.log('[Social Recall] Navigated away from profile page');
+    // Switch to history mode
+    if (panel) {
+      panel.setMinimalMode(true);
+      loadAndShowHistory();
+    }
+  }
+}
+
+/**
  * Observe URL changes for SPA navigation
+ * Uses multiple strategies for reliability:
+ * 1. Intercept history.pushState and replaceState (programmatic navigation)
+ * 2. Listen to popstate event (back/forward navigation)
+ * 3. MutationObserver as fallback (catches any missed changes)
  */
 function observeUrlChanges(): void {
   let lastUrl = window.location.href;
 
-  const observer = new MutationObserver(() => {
-    if (window.location.href !== lastUrl) {
-      lastUrl = window.location.href;
-      currentProfileId = null;
-
-      if (isLinkedInProfileUrl(lastUrl)) {
-        console.log('[Social Recall] Navigated to profile page');
-        // Switch to full mode and extract intelligence
-        if (panel) {
-          panel.setMinimalMode(false);
-        }
-        // Small delay to let page content load
-        setTimeout(() => handleProfilePage(), 500);
-      } else {
-        console.log('[Social Recall] Navigated away from profile page');
-        // Switch to history mode
-        if (panel) {
-          panel.setMinimalMode(true);
-          loadAndShowHistory();
-        }
-      }
+  // Helper to check and handle URL change
+  const checkUrlChange = () => {
+    const currentUrl = window.location.href;
+    if (currentUrl !== lastUrl) {
+      const oldUrl = lastUrl;
+      lastUrl = currentUrl;
+      handleUrlChange(currentUrl, oldUrl);
     }
+  };
+
+  // Strategy 1: Intercept history.pushState and history.replaceState
+  const originalPushState = history.pushState.bind(history);
+  const originalReplaceState = history.replaceState.bind(history);
+
+  history.pushState = function(...args) {
+    originalPushState(...args);
+    console.log('[Social Recall] history.pushState detected');
+    checkUrlChange();
+  };
+
+  history.replaceState = function(...args) {
+    originalReplaceState(...args);
+    console.log('[Social Recall] history.replaceState detected');
+    checkUrlChange();
+  };
+
+  // Strategy 2: Listen to popstate event (back/forward navigation)
+  window.addEventListener('popstate', () => {
+    console.log('[Social Recall] popstate event detected');
+    checkUrlChange();
+  });
+
+  // Strategy 3: MutationObserver as fallback
+  // Some SPAs might change URL in ways we don't catch above
+  const observer = new MutationObserver(() => {
+    checkUrlChange();
   });
 
   observer.observe(document.body, { childList: true, subtree: true });
+
+  console.log('[Social Recall] URL change observers installed');
 }
 
 // Initialize when DOM is ready

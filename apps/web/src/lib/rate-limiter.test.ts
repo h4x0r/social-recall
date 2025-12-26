@@ -1,5 +1,12 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { RateLimiter, createRateLimiter } from './rate-limiter';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { NextRequest } from 'next/server';
+import {
+  RateLimiter,
+  createRateLimiter,
+  RATE_LIMIT_CONFIG,
+  getClientIdentifier,
+  withRateLimit,
+} from './rate-limiter';
 
 describe('RateLimiter', () => {
   let limiter: RateLimiter;
@@ -97,5 +104,99 @@ describe('default rate limiter config', () => {
       expect(limiter.isAllowed('test-ip')).toBe(true);
     }
     expect(limiter.isAllowed('test-ip')).toBe(false);
+  });
+});
+
+// ============================================================================
+// Middleware Tests
+// ============================================================================
+
+describe('RATE_LIMIT_CONFIG', () => {
+  it('defines limits for different route types', () => {
+    expect(RATE_LIMIT_CONFIG.sync.maxRequests).toBeGreaterThan(0);
+    expect(RATE_LIMIT_CONFIG.notes.maxRequests).toBeGreaterThan(0);
+    expect(RATE_LIMIT_CONFIG.ai.maxRequests).toBeGreaterThan(0);
+  });
+
+  it('has stricter limits for AI routes', () => {
+    expect(RATE_LIMIT_CONFIG.ai.maxRequests).toBeLessThanOrEqual(RATE_LIMIT_CONFIG.notes.maxRequests);
+  });
+});
+
+describe('getClientIdentifier', () => {
+  it('extracts IP from x-forwarded-for header', () => {
+    const request = new NextRequest('http://localhost/api/test', {
+      headers: { 'x-forwarded-for': '192.168.1.100, 10.0.0.1' },
+    });
+    expect(getClientIdentifier(request)).toBe('192.168.1.100');
+  });
+
+  it('extracts IP from x-real-ip header', () => {
+    const request = new NextRequest('http://localhost/api/test', {
+      headers: { 'x-real-ip': '192.168.1.200' },
+    });
+    expect(getClientIdentifier(request)).toBe('192.168.1.200');
+  });
+
+  it('returns unknown for missing headers', () => {
+    const request = new NextRequest('http://localhost/api/test');
+    expect(getClientIdentifier(request)).toBe('unknown');
+  });
+});
+
+describe('withRateLimit', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('allows requests under the limit', async () => {
+    const handler = vi.fn().mockResolvedValue(new Response('OK'));
+    const limitedHandler = withRateLimit(handler, 'notes');
+
+    const request = new NextRequest('http://localhost/api/test', {
+      headers: { 'x-forwarded-for': '10.0.0.1' },
+    });
+
+    const response = await limitedHandler(request);
+    expect(handler).toHaveBeenCalled();
+    expect(response.status).not.toBe(429);
+  });
+
+  it('blocks requests over the limit with 429', async () => {
+    const handler = vi.fn().mockResolvedValue(new Response('OK'));
+    const limitedHandler = withRateLimit(handler, 'ai');
+
+    const request = new NextRequest('http://localhost/api/test', {
+      headers: { 'x-forwarded-for': '10.0.0.99' },
+    });
+
+    // Exhaust the limit
+    for (let i = 0; i < RATE_LIMIT_CONFIG.ai.maxRequests; i++) {
+      await limitedHandler(request);
+    }
+
+    // Next request should be blocked
+    const response = await limitedHandler(request);
+    expect(response.status).toBe(429);
+
+    const body = await response.json();
+    expect(body.error).toContain('Too many requests');
+  });
+
+  it('includes rate limit headers in response', async () => {
+    const handler = vi.fn().mockResolvedValue(new Response('OK'));
+    const limitedHandler = withRateLimit(handler, 'notes');
+
+    const request = new NextRequest('http://localhost/api/test', {
+      headers: { 'x-forwarded-for': '10.0.0.50' },
+    });
+
+    const response = await limitedHandler(request);
+    expect(response.headers.get('X-RateLimit-Limit')).toBeTruthy();
+    expect(response.headers.get('X-RateLimit-Remaining')).toBeTruthy();
   });
 });

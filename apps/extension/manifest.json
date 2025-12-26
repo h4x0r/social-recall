@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "Social Recall",
-  "version": "0.0.0.6",
+  "version": "0.0.0.7",
   "description": "Remind you of people you came across on social networks",
-  "permissions": ["storage", "activeTab", "scripting", "tabs", "contextMenus"],
+  "permissions": ["storage", "activeTab", "scripting", "tabs", "contextMenus", "webNavigation"],
   "host_permissions": [
     "*://*.linkedin.com/*",
     "https://social-recall.vercel.app/*",

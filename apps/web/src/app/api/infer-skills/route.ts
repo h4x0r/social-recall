@@ -211,14 +211,19 @@ function parseResponse(text: string): IntelligenceResponse {
     goodFor: [],
   };
 
+  console.log('[parseResponse] Raw AI text:', text.slice(0, 500));
+
   try {
     let jsonStr = text;
     const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
     if (codeBlockMatch) {
+      console.log('[parseResponse] Found code block, extracting JSON');
       jsonStr = codeBlockMatch[1];
     }
 
+    console.log('[parseResponse] Parsing JSON:', jsonStr.slice(0, 300));
     const parsed = JSON.parse(jsonStr);
+    console.log('[parseResponse] Parsed object keys:', Object.keys(parsed));
 
     // Parse skills
     if (parsed.skills && Array.isArray(parsed.skills)) {
@@ -240,9 +245,15 @@ function parseResponse(text: string): IntelligenceResponse {
     // Parse archetype (validate against known archetypes)
     if (typeof parsed.archetype === 'string') {
       const normalized = parsed.archetype.toLowerCase().trim();
+      console.log('[parseResponse] Archetype from AI:', parsed.archetype, '-> normalized:', normalized);
       if (ARCHETYPES.includes(normalized as Archetype)) {
         result.archetype = normalized;
+        console.log('[parseResponse] Valid archetype:', normalized);
+      } else {
+        console.log('[parseResponse] INVALID archetype, not in list:', ARCHETYPES);
       }
+    } else {
+      console.log('[parseResponse] No archetype string found, got:', typeof parsed.archetype);
     }
 
     // Parse couldBe
@@ -258,10 +269,12 @@ function parseResponse(text: string): IntelligenceResponse {
         (item: unknown) => typeof item === 'string' && item.trim() !== ''
       );
     }
-  } catch {
-    // Return empty result on parse error
+  } catch (error) {
+    console.error('[parseResponse] JSON parse error:', error);
+    console.error('[parseResponse] Failed text was:', text.slice(0, 200));
   }
 
+  console.log('[parseResponse] Final result:', JSON.stringify(result).slice(0, 300));
   return result;
 }
 

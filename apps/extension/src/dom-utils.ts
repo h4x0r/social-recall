@@ -224,7 +224,23 @@ export async function waitForLinkedInProfile(
     () => {
       // Check for profile name
       const h1 = document.querySelector('h1');
-      const hasName = h1?.textContent?.trim().length > 0;
+      const hasName = (h1?.textContent?.trim().length ?? 0) > 0;
+
+      // Check for headline (critical for AI inference) - try multiple selectors
+      const headlineSelectors = [
+        '.text-body-medium.break-words',
+        '.text-body-medium',
+        '[data-generated-suggestion-target] + div',
+        '.pv-text-details__left-panel .text-body-medium',
+      ];
+      let hasHeadline = false;
+      for (const sel of headlineSelectors) {
+        const el = document.querySelector(sel);
+        if ((el?.textContent?.trim().length ?? 0) > 0) {
+          hasHeadline = true;
+          break;
+        }
+      }
 
       // Check for Experience or About text (multiple possible patterns)
       const bodyText = document.body.textContent || '';
@@ -244,10 +260,11 @@ export async function waitForLinkedInProfile(
       // Check that loaders are gone (sections fully loaded)
       const loadersGone = document.querySelectorAll('[class*="pvs-loader"]').length === 0;
 
-      console.log(`[Social Recall] Load check: name=${hasName}, content=${hasProfileContent}, children=${mainEl?.children.length}, pvs=${hasPvsElements}, cards=${hasArtdecoCards}, loadersGone=${loadersGone}`);
+      console.log(`[Social Recall] Load check: name=${hasName}, headline=${hasHeadline}, content=${hasProfileContent}, children=${mainEl?.children.length}, pvs=${hasPvsElements}, cards=${hasArtdecoCards}, loadersGone=${loadersGone}`);
 
+      // Must have name AND headline for AI to work
       // Either we have profile content text, OR we have enough structural elements
-      return hasName && (hasProfileContent || (hasMultipleChildren && hasPvsElements && loadersGone) || hasArtdecoCards);
+      return hasName && hasHeadline && (hasProfileContent || (hasMultipleChildren && hasPvsElements && loadersGone) || hasArtdecoCards);
     },
     { timeout, interval: 500 }
   );
@@ -285,4 +302,123 @@ export function extractListItems(section: Element): Element[] {
   }
 
   return [];
+}
+
+/**
+ * Quick scroll to trigger lazy loading during page load
+ * Happens once, quickly, returns to top - feels like part of page loading
+ */
+async function triggerLazyLoad(): Promise<void> {
+  // Save current position
+  const originalPosition = window.scrollY;
+
+  // Quick scroll down and back (within ~1 second)
+  // Uses instant scroll to be fast and unobtrusive
+  window.scrollTo(0, 1500);
+  await new Promise(resolve => setTimeout(resolve, 200));
+  window.scrollTo(0, 3000);
+  await new Promise(resolve => setTimeout(resolve, 200));
+  window.scrollTo(0, originalPosition);
+
+  // Brief wait for content to render
+  await new Promise(resolve => setTimeout(resolve, 300));
+}
+
+/**
+ * Wait for section content to load, with one quick scroll to trigger lazy loading
+ */
+export async function waitForSectionContent(
+  options: WaitOptions = {}
+): Promise<boolean> {
+  const { timeout = 8000, interval = 400 } = options;
+  const startTime = Date.now();
+
+  console.log('[Social Recall] Waiting for section content...');
+
+  // First, do one quick scroll to trigger lazy loading
+  await triggerLazyLoad();
+
+  // Then wait for Experience section to have content
+  while (Date.now() - startTime < timeout) {
+    const sections = document.querySelectorAll('main section');
+
+    for (const section of sections) {
+      const h2 = section.querySelector('h2');
+      if (h2?.textContent?.toLowerCase().includes('experience')) {
+        const logos = section.querySelectorAll('img[src*="company-logo"], img[src*="shrink_100"]');
+        const spans = section.querySelectorAll('span[aria-hidden="true"]');
+
+        if (logos.length >= 1 && spans.length >= 5) {
+          console.log('[Social Recall] Section content loaded');
+          return true;
+        }
+      }
+    }
+
+    await new Promise(resolve => setTimeout(resolve, interval));
+  }
+
+  console.log('[Social Recall] Section content timeout - proceeding anyway');
+  return false;
+}
+
+/**
+ * Set up observer for lazy-loaded content
+ * Calls callback when new content appears (user scrolls)
+ */
+export function observeLazyContent(callback: () => void): () => void {
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const observer = new MutationObserver(() => {
+    // Debounce to avoid too many callbacks
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      callback();
+    }, 500);
+  });
+
+  // Observe main content area for changes
+  const main = document.querySelector('main');
+  if (main) {
+    observer.observe(main, {
+      childList: true,
+      subtree: true,
+    });
+  }
+
+  // Return cleanup function
+  return () => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    observer.disconnect();
+  };
+}
+
+/**
+ * Complete profile load wait
+ * Phase 1: Basic profile structure
+ * Phase 2: Quick scroll to trigger lazy loading, then wait for content
+ */
+export async function waitForCompleteProfile(
+  options: WaitOptions = {}
+): Promise<boolean> {
+  const { timeout = 15000 } = options;
+  const startTime = Date.now();
+
+  // Phase 1: Wait for basic profile structure
+  const basicLoaded = await waitForLinkedInProfile({
+    timeout: Math.min(10000, timeout)
+  });
+
+  if (!basicLoaded) {
+    console.log('[Social Recall] Basic profile load failed');
+    return false;
+  }
+
+  // Phase 2: Quick scroll + wait for section content
+  const remainingTimeout = timeout - (Date.now() - startTime);
+  if (remainingTimeout > 0) {
+    await waitForSectionContent({ timeout: Math.min(8000, remainingTimeout) });
+  }
+
+  return true;
 }

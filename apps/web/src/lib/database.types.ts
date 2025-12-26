@@ -15,6 +15,11 @@ export interface DbContact {
   avatar_url: string | null;
   last_synced_at: string | null;
   is_new: boolean;
+  // Contact consolidation fields
+  google_id: string | null;
+  email: string | null;
+  phone: string | null;
+  location: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -50,6 +55,81 @@ export interface DbContactNote {
   content: string;
   created_at: string;
   updated_at: string;
+}
+
+export type ContactHistoryField = 'name' | 'headline' | 'location' | 'employers' | 'education';
+
+export interface DbContactHistory {
+  id: string;
+  contact_id: string;
+  field: ContactHistoryField;
+  old_value: Record<string, unknown> | null;
+  new_value: Record<string, unknown>;
+  detected_at: string;
+  created_at: string;
+}
+
+export interface DbContactHistoryInsert {
+  contact_id: string;
+  field: ContactHistoryField;
+  old_value?: Record<string, unknown> | null;
+  new_value: Record<string, unknown>;
+  detected_at: string;
+}
+
+// =============================================================================
+// CONTACT CONSOLIDATION (LinkedIn + Google merging)
+// =============================================================================
+
+export type ContactSourceType = 'linkedin' | 'google' | 'icloud' | 'manual';
+
+export interface DbContactSource {
+  id: string;
+  contact_id: string;
+  source: ContactSourceType;
+  source_id: string;
+  raw_data: Record<string, unknown> | null;
+  imported_at: string;
+  created_at: string;
+}
+
+export interface DbContactSourceInsert {
+  contact_id: string;
+  source: ContactSourceType;
+  source_id: string;
+  raw_data?: Record<string, unknown> | null;
+  imported_at?: string;
+}
+
+export type PendingMatchStatus = 'pending' | 'confirmed' | 'rejected' | 'skipped';
+
+export interface DbPendingMatch {
+  id: string;
+  user_id: string;
+  linkedin_contact_id: string;
+  google_resource_name: string;
+  google_contact_data: Record<string, unknown>;
+  score: number;
+  signals: Record<string, unknown>;
+  status: PendingMatchStatus;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DbPendingMatchInsert {
+  user_id: string;
+  linkedin_contact_id: string;
+  google_resource_name: string;
+  google_contact_data: Record<string, unknown>;
+  score: number;
+  signals?: Record<string, unknown>;
+  status?: PendingMatchStatus;
+}
+
+export interface DbPendingMatchUpdate {
+  status?: PendingMatchStatus;
+  reviewed_at?: string;
 }
 
 export type OpportunityType = 'new_company' | 'role_change' | 'left_job';
@@ -99,6 +179,10 @@ export interface DbContactInsert {
   avatar_url?: string | null;
   last_synced_at?: string | null;
   is_new?: boolean;
+  google_id?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  location?: string | null;
 }
 
 export interface DbContactEmployerInsert {
@@ -167,6 +251,10 @@ export interface DbContactUpdate {
   avatar_url?: string | null;
   last_synced_at?: string | null;
   is_new?: boolean;
+  google_id?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  location?: string | null;
 }
 
 export interface DbContactSkillUpdate {
@@ -375,6 +463,21 @@ export interface Database {
         Row: DbContactNote;
         Insert: DbContactNoteInsert;
         Update: DbContactNoteUpdate;
+      };
+      contact_history: {
+        Row: DbContactHistory;
+        Insert: DbContactHistoryInsert;
+        Update: never;
+      };
+      contact_sources: {
+        Row: DbContactSource;
+        Insert: DbContactSourceInsert;
+        Update: never;
+      };
+      pending_matches: {
+        Row: DbPendingMatch;
+        Insert: DbPendingMatchInsert;
+        Update: DbPendingMatchUpdate;
       };
       opportunities: {
         Row: DbOpportunity;
