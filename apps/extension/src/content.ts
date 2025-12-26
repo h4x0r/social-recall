@@ -2029,7 +2029,7 @@ function mergeProfileDataSync(
 /**
  * Get the web app URL from storage or use default
  */
-const DEFAULT_WEB_APP_URL = 'https://social-recall.vercel.app';
+const DEFAULT_WEB_APP_URL = 'https://socialrecall.now';
 
 async function getApiUrl(): Promise<string> {
   return new Promise((resolve) => {

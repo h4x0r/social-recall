@@ -135,6 +135,24 @@ describe('inferIntelligence', () => {
       const call = mockFetch.mock.calls[0];
       expect(call[0]).toContain('/api/infer-skills');
     });
+
+    it('uses socialrecall.now as default API URL', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          success: true,
+          skills: [],
+          archetype: 'builder',
+          couldBe: [],
+          goodFor: [],
+        }),
+      });
+
+      await inferIntelligence(mockProfile);
+
+      const call = mockFetch.mock.calls[0];
+      expect(call[0]).toBe('https://socialrecall.now/api/infer-skills');
+    });
   });
 
   describe('error handling', () => {

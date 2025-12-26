@@ -13,7 +13,7 @@ export const EXTENSION_ORIGINS = [
 const WEB_ORIGINS = [
   'http://localhost:3000',
   'http://localhost:3001',
-  'https://social-recall.vercel.app',
+  'https://socialrecall.now',
 ] as const;
 
 /**

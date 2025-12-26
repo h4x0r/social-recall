@@ -6,7 +6,7 @@
   "permissions": ["storage", "activeTab", "scripting", "tabs", "contextMenus", "webNavigation"],
   "host_permissions": [
     "*://*.linkedin.com/*",
-    "https://social-recall.vercel.app/*",
+    "https://socialrecall.now/*",
     "https://*.vercel.app/*"
   ],
   "background": {

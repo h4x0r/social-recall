@@ -6,7 +6,7 @@
 // Allowed origins for receiving auth tokens
 export const WEB_APP_ORIGINS = [
   'http://localhost:3000',
-  'https://social-recall.vercel.app',
+  'https://socialrecall.now',
 ];
 
 interface AuthTokenMessage {

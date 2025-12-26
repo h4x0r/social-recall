@@ -62,7 +62,7 @@ describe('Background Script', () => {
     });
 
     it('includes production URL', () => {
-      expect(WEB_APP_ORIGINS.some((origin) => origin.includes('vercel.app'))).toBe(true);
+      expect(WEB_APP_ORIGINS).toContain('https://socialrecall.now');
     });
   });
 
@@ -120,7 +120,7 @@ describe('Background Script', () => {
 
     it('accepts messages from production vercel URL', () => {
       const sendResponse = vi.fn();
-      const sender = { url: 'https://social-recall.vercel.app/auth/extension' };
+      const sender = { url: 'https://socialrecall.now/auth/extension' };
 
       messageExternalListener!(
         { type: 'AUTH_TOKEN', token: 'prod-token' },
