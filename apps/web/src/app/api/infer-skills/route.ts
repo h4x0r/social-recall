@@ -185,7 +185,7 @@ function buildPrompt(profile: ProfileData): string {
   parts.push('- integrator: Product managers, generalists, bridge-builders');
   parts.push('- evangelist: Developer advocates, thought leaders, community builders');
   parts.push('- investor: Angels, VCs, LPs who fund ventures');
-  parts.push('- unknown: Doesn\'t clearly fit the above archetypes');
+  parts.push('- unknown: ONLY use if person genuinely cannot be categorized (extremely rare - most people fit one archetype)');
   parts.push('');
   parts.push('COULD BE (relationship potential - choose 1-3):');
   parts.push('Co-founder, Tech Advisor, Board Member, Mentor, Contractor, Design Lead, Sales Lead, Investor, Partner');
@@ -196,7 +196,8 @@ function buildPrompt(profile: ProfileData): string {
   parts.push('Rules:');
   parts.push('- Include 3-10 skills with confidence 0.0-1.0');
   parts.push('- Be specific with skills (e.g., "Kubernetes Security" not just "Security")');
-  parts.push('- Choose archetype based on primary professional identity');
+  parts.push('- ALWAYS pick a specific archetype - everyone has a primary professional identity');
+  parts.push('- Choose the BEST FIT archetype even if not perfect - "unknown" is almost never correct');
   parts.push('- couldBe should reflect realistic relationship opportunities');
   parts.push('- goodFor should match their domain expertise and company history');
 
