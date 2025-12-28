@@ -3,6 +3,8 @@
  * Art deco styled floating panel that displays profile intelligence
  */
 
+import { logger } from './logger';
+
 export enum PanelState {
   Minimized = 'minimized',
   Expanded = 'expanded',
@@ -490,7 +492,7 @@ export function createPanel(container: HTMLElement): Panel {
   }
 
   function setIntelligence(intelligence: ProfileIntelligence): void {
-    console.log('[Social Recall Panel] setIntelligence called with:', intelligence);
+    logger.debug(' setIntelligence called with:', intelligence);
     currentIntelligence = intelligence;
 
     // Normalize archetype - use Unknown if not in current set
@@ -498,7 +500,7 @@ export function createPanel(container: HTMLElement): Panel {
       ? intelligence.archetype
       : Archetype.Unknown;
     const tarotCard = ARCHETYPE_TAROT[validArchetype];
-    console.log('[Social Recall Panel] Using archetype:', validArchetype, 'tarot:', tarotCard);
+    logger.debug(' Using archetype:', validArchetype, 'tarot:', tarotCard);
 
     const jobAlertHtml = intelligence.jobChange
       ? `<div class="sr-panel__job-alert">
@@ -636,9 +638,9 @@ export function createPanel(container: HTMLElement): Panel {
       </div>
     `;
 
-    console.log('[Social Recall Panel] Content updated, innerHTML length:', content.innerHTML.length);
-    console.log('[Social Recall Panel] Content visible class:', content.classList.contains('sr-panel__content--visible'));
-    console.log('[Social Recall Panel] Panel state:', state);
+    logger.debug(' Content updated, innerHTML length:', content.innerHTML.length);
+    logger.debug(' Content visible class:', content.classList.contains('sr-panel__content--visible'));
+    logger.debug(' Panel state:', state);
 
     const minimizeBtn = content.querySelector('.sr-panel__minimize');
     minimizeBtn?.addEventListener('click', toggle);
@@ -920,7 +922,7 @@ export function createPanel(container: HTMLElement): Panel {
   }
 
   function primeForProfile(name: string, headline?: string, location?: string, avatarUrl?: string): void {
-    console.log('[Social Recall Panel] Priming for profile:', name, headline, location);
+    logger.debug(' Priming for profile:', name, headline, location);
 
     // Use unknown tarot as placeholder
     const tarotCard = ARCHETYPE_TAROT[Archetype.Unknown];

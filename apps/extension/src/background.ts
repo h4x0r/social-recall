@@ -3,6 +3,8 @@
  * Handles external messages from web app for auth token flow
  */
 
+import { logger } from './logger';
+
 // Allowed origins for receiving auth tokens
 export const WEB_APP_ORIGINS = [
   'http://localhost:3000',
@@ -103,7 +105,7 @@ export function setupNavigationListener(): void {
       // Only handle main frame navigation
       if (details.frameId !== 0) return;
 
-      console.log('[Social Recall BG] SPA navigation detected:', details.url);
+      logger.debug(' SPA navigation detected:', details.url);
 
       // Send message to content script
       chrome.tabs.sendMessage(details.tabId, {
@@ -116,7 +118,7 @@ export function setupNavigationListener(): void {
     { url: [{ hostContains: 'linkedin.com' }] }
   );
 
-  console.log('[Social Recall BG] Navigation listener set up');
+  logger.debug(' Navigation listener set up');
 }
 
 /**
@@ -124,7 +126,7 @@ export function setupNavigationListener(): void {
  */
 function setupAutoUpdate(): void {
   chrome.runtime.onUpdateAvailable.addListener(() => {
-    console.log('[Social Recall BG] Update available, reloading...');
+    logger.debug(' Update available, reloading...');
     chrome.runtime.reload();
   });
 }
