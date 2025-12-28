@@ -3,53 +3,17 @@
  * Calls web app API to infer intelligence from LinkedIn profiles
  */
 
-export interface Employer {
-  company: string;
-  logo: string;
-}
+import {
+  type Employer,
+  type Education,
+  type Volunteering,
+  type Certification,
+  type Activity,
+  type ProfileData,
+} from './types';
 
-export interface Education {
-  school: string;
-  degree?: string;
-  field?: string;
-  dates?: string;
-}
-
-export interface Volunteering {
-  organization: string;
-  role?: string;
-  cause?: string;
-}
-
-export interface Certification {
-  name: string;
-  issuer?: string;
-  issueDate?: string;
-  expirationDate?: string;
-  credentialId?: string;
-  credentialUrl?: string;
-}
-
-export interface Activity {
-  type: 'post' | 'comment' | 'reaction';
-  text: string;
-  date?: string;
-}
-
-export interface ProfileData {
-  name: string;
-  headline: string;
-  about?: string;
-  employers?: Employer[];
-  education?: Education[];
-  honorsAwards?: string[];
-  courses?: string[];
-  languages?: string[];
-  volunteering?: Volunteering[];
-  certifications?: Certification[];
-  activities?: Activity[];
-  notes?: string;
-}
+// Re-export for backward compatibility
+export type { Employer, Education, Volunteering, Certification, Activity, ProfileData };
 
 export interface InferredSkill {
   name: string;

@@ -5,6 +5,8 @@
  * - Caching to avoid re-scraping
  */
 
+import { wait } from './types';
+
 const MAX_ACTIVITY_POSTS = 20;
 const MIN_POST_LENGTH = 10;
 const MAX_POST_LENGTH = 500;
@@ -110,13 +112,6 @@ function truncatePost(text: string): string {
  */
 export function randomDelay(): number {
   return MIN_DELAY_MS + Math.random() * (MAX_DELAY_MS - MIN_DELAY_MS);
-}
-
-/**
- * Wait for a specified duration
- */
-function wait(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 /**

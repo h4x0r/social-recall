@@ -3,17 +3,10 @@
  * Detects and records changes to profile fields over time
  */
 
-export interface Employer {
-  company: string;
-  logo: string;
-}
+import { type Employer, type Education } from './types';
 
-export interface Education {
-  school: string;
-  degree?: string;
-  field?: string;
-  dates?: string;
-}
+// Re-export for backward compatibility
+export type { Employer, Education };
 
 export interface HistoryEntry {
   date: string;

@@ -3,10 +3,10 @@
  * These are extracted from popup.ts to enable unit testing
  */
 
-export interface Employer {
-  company: string;
-  logo: string;
-}
+import { type Employer } from './types';
+
+// Re-export for backward compatibility
+export type { Employer };
 
 /**
  * Extracts LinkedIn profile ID from a URL

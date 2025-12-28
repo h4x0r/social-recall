@@ -3,52 +3,16 @@
  * Syncs local contacts to Social Recall web app
  */
 
-interface Employer {
-  company: string;
-  logo: string;
-  title?: string;
-  isCurrent?: boolean;
-  startDate?: string;
-  endDate?: string;
-}
-
-interface Education {
-  school: string;
-  degree?: string;
-  field?: string;
-  startDate?: string;
-  endDate?: string;
-}
-
-interface Certification {
-  name: string;
-  issuer?: string;
-  issueDate?: string;
-  expirationDate?: string;
-}
-
-interface Project {
-  name: string;
-  description?: string;
-  url?: string;
-}
-
-interface Publication {
-  title: string;
-  publisher?: string;
-  url?: string;
-  date?: string;
-}
-
-interface Service {
-  name: string;
-  description?: string;
-}
-
-interface Website {
-  label?: string;
-  url: string;
-}
+import {
+  type Employer,
+  type Education,
+  type Certification,
+  type Project,
+  type Publication,
+  type Service,
+  type Website,
+  isExtensionContextValid,
+} from './types';
 
 interface SocialNote {
   name: string;
@@ -85,17 +49,6 @@ interface SyncResult {
 
 // Default web app URL (can be configured in settings)
 const DEFAULT_WEB_APP_URL = 'https://www.socialrecall.now';
-
-/**
- * Check if extension context is still valid
- */
-function isExtensionContextValid(): boolean {
-  try {
-    return chrome.runtime?.id !== undefined;
-  } catch {
-    return false;
-  }
-}
 
 /**
  * Get the configured web app URL

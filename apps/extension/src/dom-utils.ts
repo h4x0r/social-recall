@@ -3,6 +3,8 @@
  * Provides reliable waiting and querying similar to Playwright's API
  */
 
+import { logger } from './logger';
+
 export interface WaitOptions {
   timeout?: number;
   interval?: number;
@@ -30,7 +32,7 @@ export async function waitForSelector(
     await new Promise((resolve) => setTimeout(resolve, interval));
   }
 
-  console.log(`[Social Recall] waitForSelector timeout: ${selector}`);
+  logger.debug(`waitForSelector timeout: ${selector}`);
   return null;
 }
 
@@ -131,26 +133,6 @@ export async function waitForStable(stabilityMs: number = 500): Promise<void> {
 }
 
 /**
- * Scroll and wait for lazy content to load
- */
-export async function scrollAndWait(): Promise<void> {
-  const scrollHeight = document.body.scrollHeight;
-  const viewportHeight = window.innerHeight;
-
-  // Scroll in chunks
-  for (let pos = 0; pos < scrollHeight; pos += viewportHeight) {
-    window.scrollTo(0, pos);
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
-
-  // Scroll back to top
-  window.scrollTo(0, 0);
-
-  // Wait for DOM to stabilize after scroll
-  await waitForStable(300);
-}
-
-/**
  * Extract text from an element, handling aria-hidden patterns
  */
 export function extractText(element: Element | null): string | undefined {
@@ -207,12 +189,12 @@ export async function waitForLinkedInProfile(
 ): Promise<boolean> {
   const { timeout = DEFAULT_TIMEOUT } = options;
 
-  console.log('[Social Recall] Waiting for LinkedIn profile to load...');
+  logger.debug('Waiting for LinkedIn profile to load...');
 
   // First, wait for the main content area
   const main = await waitForSelector('main', { timeout: 5000 });
   if (!main) {
-    console.log('[Social Recall] Main element not found');
+    logger.debug('Main element not found');
     return false;
   }
 
@@ -258,7 +240,7 @@ export async function waitForLinkedInProfile(
       // Check that loaders are gone (sections fully loaded)
       const loadersGone = document.querySelectorAll('[class*="pvs-loader"]').length === 0;
 
-      console.log(`[Social Recall] Load check: name=${hasName}, headline=${hasHeadline}, content=${hasProfileContent}, children=${mainEl?.children.length}, pvs=${hasPvsElements}, cards=${hasArtdecoCards}, loadersGone=${loadersGone}`);
+      logger.debug(`Load check: name=${hasName}, headline=${hasHeadline}, content=${hasProfileContent}, children=${mainEl?.children.length}, pvs=${hasPvsElements}, cards=${hasArtdecoCards}, loadersGone=${loadersGone}`);
 
       // Must have name AND headline for AI to work
       // Either we have profile content text, OR we have enough structural elements
@@ -268,11 +250,11 @@ export async function waitForLinkedInProfile(
   );
 
   if (loaded) {
-    console.log('[Social Recall] Profile loaded successfully');
+    logger.debug('Profile loaded successfully');
     // Give a bit more time for final rendering
     await waitForStable(500);
   } else {
-    console.log('[Social Recall] Profile load timeout - proceeding anyway');
+    logger.debug('Profile load timeout - proceeding anyway');
     // Still wait a bit for content to render
     await waitForStable(1000);
   }
@@ -324,7 +306,7 @@ export async function waitForSectionContent(
   const { timeout = 8000, interval = 400 } = options;
   const startTime = Date.now();
 
-  console.log('[Social Recall] Waiting for section content...');
+  logger.debug('Waiting for section content...');
 
   // First, do one quick scroll to trigger lazy loading
   await triggerLazyLoad();
@@ -342,7 +324,7 @@ export async function waitForSectionContent(
         // More lenient check: any logo OR at least 3 spans (title, company, duration)
         // This handles sparse profiles like Tony Robbins (1 employer with minimal data)
         if (logos.length >= 1 || spans.length >= 3) {
-          console.log('[Social Recall] Section content loaded (logos:', logos.length, 'spans:', spans.length, ')');
+          logger.debug('Section content loaded (logos:', logos.length, 'spans:', spans.length, ')');
           return true;
         }
       }
@@ -351,7 +333,7 @@ export async function waitForSectionContent(
     await new Promise(resolve => setTimeout(resolve, interval));
   }
 
-  console.log('[Social Recall] Section content timeout - proceeding anyway');
+  logger.debug('Section content timeout - proceeding anyway');
   return false;
 }
 
@@ -403,7 +385,7 @@ export async function waitForCompleteProfile(
   });
 
   if (!basicLoaded) {
-    console.log('[Social Recall] Basic profile load failed');
+    logger.debug('Basic profile load failed');
     return false;
   }
 
