@@ -10,8 +10,8 @@ export default defineConfig({
   workers: 1, // Extensions require single worker
 
   use: {
-    // Chrome extensions require the new headless mode or headed
-    headless: false,
+    // Chrome extensions require the new headless mode (not legacy headless)
+    headless: 'new' as const,
     viewport: { width: 1280, height: 720 },
     actionTimeout: 10000,
     trace: 'on-first-retry',

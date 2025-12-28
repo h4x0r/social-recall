@@ -216,10 +216,8 @@ export async function waitForLinkedInProfile(
     return false;
   }
 
-  // Scroll to trigger lazy loading
-  await scrollAndWait();
-
-  // Wait for key indicators that profile is loaded
+  // No scrolling - LinkedIn loads all sections after a few seconds anyway
+  // Just wait for key indicators that profile is loaded
   const loaded = await waitForFunction(
     () => {
       // Check for profile name
@@ -305,27 +303,20 @@ export function extractListItems(section: Element): Element[] {
 }
 
 /**
- * Quick scroll to trigger lazy loading during page load
- * Happens once, quickly, returns to top - feels like part of page loading
+ * Wait for LinkedIn to load all sections
+ * Testing showed scroll position doesn't matter - LinkedIn loads all sections
+ * after a few seconds regardless of scroll. Just waiting is sufficient and
+ * causes zero visual disruption to the user.
  */
 async function triggerLazyLoad(): Promise<void> {
-  // Save current position
-  const originalPosition = window.scrollY;
-
-  // Quick scroll down and back (within ~1 second)
-  // Uses instant scroll to be fast and unobtrusive
-  window.scrollTo(0, 1500);
-  await new Promise(resolve => setTimeout(resolve, 200));
-  window.scrollTo(0, 3000);
-  await new Promise(resolve => setTimeout(resolve, 200));
-  window.scrollTo(0, originalPosition);
-
-  // Brief wait for content to render
-  await new Promise(resolve => setTimeout(resolve, 300));
+  // LinkedIn loads all sections after ~3 seconds regardless of scroll position
+  // No scrolling needed - just wait for content to load
+  // Testing showed: 2s=0 sections, 3s=6 sections, 4s+=no additional gain
+  await new Promise(resolve => setTimeout(resolve, 3000));
 }
 
 /**
- * Wait for section content to load, with one quick scroll to trigger lazy loading
+ * Wait for section content to load
  */
 export async function waitForSectionContent(
   options: WaitOptions = {}
@@ -348,8 +339,10 @@ export async function waitForSectionContent(
         const logos = section.querySelectorAll('img[src*="company-logo"], img[src*="shrink_100"]');
         const spans = section.querySelectorAll('span[aria-hidden="true"]');
 
-        if (logos.length >= 1 && spans.length >= 5) {
-          console.log('[Social Recall] Section content loaded');
+        // More lenient check: any logo OR at least 3 spans (title, company, duration)
+        // This handles sparse profiles like Tony Robbins (1 employer with minimal data)
+        if (logos.length >= 1 || spans.length >= 3) {
+          console.log('[Social Recall] Section content loaded (logos:', logos.length, 'spans:', spans.length, ')');
           return true;
         }
       }

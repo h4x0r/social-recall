@@ -22,13 +22,15 @@ import {
   type HistoryEntry,
 } from './profile-history';
 import { syncHistory, saveNote, updateNote, deleteNote, getNotesForContact, type HistoryEntrySync } from './sync';
-import { parseVoyagerProfile, type ExtendedProfileData } from './voyager-api';
+import { type ExtendedProfileData } from './voyager-api';
 
-// Storage key for intercepted Voyager data
-const INTERCEPTED_DATA_KEY = 'sr_voyager_data';
 
 // AI skills version - bump this to force re-inference for all cached profiles
 const AI_SKILLS_VERSION = 2;
+
+// Set to true to disable API writes during testing
+// This allows testing data extraction without writing to Supabase
+const DISABLE_API_WRITES = true;
 
 interface StoredProfile {
   name: string;
@@ -108,12 +110,10 @@ interface ExtractionProgress {
 }
 
 const EXTRACTION_STEPS = [
+  { id: 'loading', label: 'Loading profile' },
   { id: 'expanding', label: 'Expanding sections' },
-  { id: 'education', label: 'Extracting education' },
   { id: 'experience', label: 'Extracting experience' },
-  { id: 'certifications', label: 'Extracting certifications' },
   { id: 'skills', label: 'Extracting skills' },
-  { id: 'activity', label: 'Analyzing activity' },
   { id: 'ai', label: 'AI analysis' },
   { id: 'complete', label: 'Complete' },
 ];
@@ -564,8 +564,17 @@ async function handleProfilePage(): Promise<void> {
     panel.setPosition(savedPosition.x, savedPosition.y);
   }
 
-  // Wait for visible content to load (NO auto-scrolling - respects user control)
-  await waitForCompleteProfile({ timeout: 15000 });
+  // Show loading progress during initial wait
+  updateProgress('loading', startTime);
+
+  // Wait for both in parallel:
+  // 1. SSR code tags (appear ~500-1000ms after page load)
+  // 2. Lazy-loaded sections (LinkedIn loads all after ~3s regardless of scroll)
+  // These are independent - no need to wait sequentially
+  await Promise.all([
+    waitForSSRCodeTags(8000),  // SSR tags (usually fast, 8s timeout for slow networks)
+    waitForCompleteProfile({ timeout: 15000 }),  // Lazy load sections (3s wait inside)
+  ]);
 
   // Re-check context validity after wait
   if (!isExtensionContextValid()) {
@@ -778,30 +787,30 @@ function closeModals(): void {
 
 /**
  * Extract profile data from the current LinkedIn page
- * Strategy: Try Voyager API intercepted data first (complete, structured),
- * then fall back to DOM scraping for anything missing
+ * Strategy: Use SSR (embedded JSON) for core profile data,
+ * DOM scraping for fields SSR doesn't include (skills, activities, etc.)
  */
 async function extractProfileData(profileId: string, startTime: number): Promise<Partial<StoredProfile>> {
   console.log('[Social Recall] Starting extraction...');
   updateProgress('expanding', startTime);
 
-  // Try to get data from intercepted Voyager API first
-  const voyagerData = getInterceptedVoyagerData();
-
-  if (voyagerData) {
-    console.log('[Social Recall] Using intercepted Voyager API data (complete, structured)');
+  // Try to get embedded profile data (SSR) - contains employers, education
+  const embeddedData = await getEmbeddedProfileData();
+  if (embeddedData) {
+    console.log('[Social Recall] Using embedded profile data (SSR)');
     updateProgress('experience', startTime);
 
-    // Voyager data is our primary source - it has complete employer/education history
+    // SSR provides: name, headline, location, about, employers, education
+    // DOM provides: skills, activities, certifications, volunteering, recommendations, etc.
     const profileData: Partial<StoredProfile> = {
-      name: voyagerData.name,
-      headline: voyagerData.headline,
-      location: voyagerData.location,
-      avatarUrl: voyagerData.avatarUrl,
-      about: voyagerData.about,
-      employers: voyagerData.employers,
-      education: voyagerData.education,
-      // Voyager doesn't provide these - fall back to DOM
+      name: embeddedData.name,
+      headline: embeddedData.headline,
+      location: embeddedData.location,
+      avatarUrl: embeddedData.avatarUrl,
+      about: embeddedData.about,
+      employers: embeddedData.employers,
+      education: embeddedData.education,
+      // DOM-only fields (SSR doesn't include these)
       skills: extractSkills(),
       certifications: extractCertifications(),
       volunteering: extractVolunteering(),
@@ -809,22 +818,31 @@ async function extractProfileData(profileId: string, startTime: number): Promise
       courses: extractCourses(),
       languages: extractLanguages(),
       activities: extractActivities(),
+      recommendations: extractRecommendations(),
+      publications: extractPublications(),
+      organizations: extractOrganizations(),
+      interests: extractInterests(),
+      testScores: extractTestScores(),
+      services: extractServices(),
       lastSeen: new Date().toISOString(),
     };
 
-    console.log('[Social Recall] Voyager extraction complete:', {
+    console.log('[Social Recall] SSR + DOM extraction complete:', {
       name: profileData.name,
+      headline: profileData.headline,
       employers: profileData.employers?.length,
       education: profileData.education?.length,
       skills: profileData.skills?.length,
+      activities: profileData.activities?.length,
+      recommendations: profileData.recommendations?.length,
     });
 
     updateProgress('complete', startTime);
     return profileData;
   }
 
-  // Fall back to DOM scraping if no Voyager data available
-  console.log('[Social Recall] No Voyager data, falling back to DOM scraping...');
+  // Fall back to full DOM scraping if no SSR data available
+  console.log('[Social Recall] No SSR data, falling back to full DOM scraping...');
 
   // Debug: Comprehensive DOM inspection
   try {
@@ -852,6 +870,12 @@ async function extractProfileData(profileId: string, startTime: number): Promise
     courses: extractCourses(),
     languages: extractLanguages(),
     activities: extractActivities(),
+    recommendations: extractRecommendations(),
+    publications: extractPublications(),
+    organizations: extractOrganizations(),
+    interests: extractInterests(),
+    testScores: extractTestScores(),
+    services: extractServices(),
     lastSeen: new Date().toISOString(),
   };
 
@@ -862,6 +886,7 @@ async function extractProfileData(profileId: string, startTime: number): Promise
     skills: profileData.skills?.length,
     certifications: profileData.certifications?.length,
     volunteering: profileData.volunteering?.length,
+    recommendations: profileData.recommendations?.length,
   });
 
   updateProgress('complete', startTime);
@@ -1188,8 +1213,12 @@ function extractEmployers(): Employer[] {
   const employers: Employer[] = [];
   const seen = new Set<string>();
 
+  console.log('[Social Recall] extractEmployers: Starting extraction...');
+
   // Try to find Experience section by header
   const experienceSection = findSectionByHeader('Experience');
+
+  console.log('[Social Recall] extractEmployers: experienceSection found:', !!experienceSection);
 
   // If found, extract from that section
   let searchContainer: Element | Document = experienceSection || document;
@@ -1314,8 +1343,16 @@ function extractEmployersFromContainer(container: Element, employers: Employer[]
   // Find list items within the container
   const items = container.querySelectorAll('li[class*="pvs-list__item"], li[class*="artdeco-list__item"], li');
 
-  for (const item of items) {
+  console.log(`[Social Recall] extractEmployersFromContainer: Found ${items.length} list items`);
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
     const companyName = extractCompanyNameFromItem(item);
+
+    if (i < 5) {
+      console.log(`[Social Recall] Item ${i}: companyName="${companyName}"`);
+    }
+
     if (companyName && !seen.has(companyName.toLowerCase())) {
       seen.add(companyName.toLowerCase());
       const logoImg = item.querySelector('img[width="48"], img[class*="entity-image"], img[src*="company-logo"]') as HTMLImageElement;
@@ -1325,42 +1362,50 @@ function extractEmployersFromContainer(container: Element, employers: Employer[]
       });
     }
   }
+
+  console.log(`[Social Recall] extractEmployersFromContainer: Extracted ${employers.length} employers`);
 }
 
 function extractCompanyNameFromItem(item: Element): string | null {
-  // Try multiple selectors for company name
-  const selectors = [
-    '.t-14.t-normal span[aria-hidden="true"]',
-    '[class*="t-normal"] span[aria-hidden="true"]',
-    '.hoverable-link-text span[aria-hidden="true"]',
-    'span.t-14.t-normal',
-    // For grouped experience (multiple roles at same company)
-    '.t-bold span[aria-hidden="true"]',
-    // Fallback to any text elements
-    'span[aria-hidden="true"]',
-  ];
+  // Modern LinkedIn structure: spans with aria-hidden="true" contain text
+  // Order is typically: [title, company, duration, location, ...]
+  // We need the SECOND span which is the company name
+  const spans = item.querySelectorAll('span[aria-hidden="true"]');
+  const texts: string[] = [];
 
-  for (const sel of selectors) {
-    const el = item.querySelector(sel);
-    if (el?.textContent?.trim()) {
-      const text = el.textContent.trim();
-
+  for (const span of spans) {
+    const text = span.textContent?.trim();
+    if (text && text.length > 1) {
       // Skip if it looks like a date range
-      if (/^\w{3} \d{4}/.test(text) || /^\d{4}/.test(text) || text.includes('Present')) {
+      if (/^\w{3} \d{4}/.test(text) || /^\d{4}\s*-/.test(text) || text.includes('Present')) {
         continue;
       }
-
-      // Company name is usually before " · " separator
-      const company = text.split(' · ')[0].trim();
-
-      // Filter out garbage data
-      if (!isValidCompanyName(company)) {
+      // Skip if it looks like a location with a bullet separator
+      if (/^\d+\s*(yr|mo|day)/.test(text) || /·.*yr/.test(text)) {
         continue;
       }
+      texts.push(text);
+    }
+  }
 
-      if (company && company.length > 1 && company.length < 100) {
-        return company;
-      }
+  // Modern layout: first is title, second is company
+  // Try to find company name - it's usually the second valid text
+  if (texts.length >= 2) {
+    const potentialCompany = texts[1];
+
+    // Clean up company name (remove " · Full-time" etc.)
+    const company = potentialCompany.split(' · ')[0].trim();
+
+    if (isValidCompanyName(company) && company.length > 1 && company.length < 100) {
+      return company;
+    }
+  }
+
+  // Fallback: try all texts
+  for (const text of texts) {
+    const company = text.split(' · ')[0].trim();
+    if (isValidCompanyName(company) && company.length > 1 && company.length < 100) {
+      return company;
     }
   }
 
@@ -1820,63 +1865,613 @@ function extractActivities(): Activity[] {
 }
 
 /**
- * Get intercepted Voyager API data from sessionStorage
- * The voyager-interceptor.ts script stores intercepted data here
+ * Extract recommendations from the main profile page
+ * LinkedIn shows received recommendations in the Recommendations section
  */
-function getInterceptedVoyagerData(): ExtendedProfileData | null {
+function extractRecommendations(): string[] {
+  const recommendations: string[] = [];
+  const MAX_RECOMMENDATIONS = 10;
+
+  const section = findSectionByHeader('Recommendations');
+  if (!section) {
+    console.log('[Social Recall] Recommendations section not found');
+    return recommendations;
+  }
+
+  console.log('[Social Recall] Found Recommendations section');
+  const seen = new Set<string>();
+
+  // Look for recommendation text content
+  const textElements = section.querySelectorAll('span[aria-hidden="true"]');
+
+  for (const element of textElements) {
+    if (recommendations.length >= MAX_RECOMMENDATIONS) break;
+    const text = element.textContent?.trim();
+
+    // Skip UI elements and short text
+    if (!text || text.length < 50) continue;
+    if (text.includes('Show all') || text.includes('Received') || text.includes('Given')) continue;
+    if (/^\d+$/.test(text)) continue;
+
+    // Skip recommender names (usually short and capitalized)
+    if (text.length < 100 && /^[A-Z][a-z]+ [A-Z]/.test(text)) continue;
+
+    // Deduplicate
+    const textLower = text.toLowerCase();
+    if (seen.has(textLower)) continue;
+    seen.add(textLower);
+
+    recommendations.push(text.slice(0, 1000));
+  }
+
+  console.log(`[Social Recall] Extracted ${recommendations.length} recommendations`);
+  return recommendations;
+}
+
+/**
+ * Extract publications from the profile
+ */
+function extractPublications(): string[] {
+  const publications: string[] = [];
+
+  const section = findSectionByHeader('Publications');
+  if (!section) {
+    return publications;
+  }
+
+  console.log('[Social Recall] Found Publications section');
+  const seen = new Set<string>();
+
+  // Look for publication titles (usually in bold spans)
+  const boldSpans = section.querySelectorAll('.t-bold span[aria-hidden="true"], span.t-bold');
+
+  for (const span of boldSpans) {
+    const text = span.textContent?.trim();
+    if (!text || text.length < 5 || text.length > 200) continue;
+    if (text.includes('Show all')) continue;
+
+    const textLower = text.toLowerCase();
+    if (!seen.has(textLower)) {
+      seen.add(textLower);
+      publications.push(text);
+    }
+  }
+
+  console.log(`[Social Recall] Extracted ${publications.length} publications`);
+  return publications;
+}
+
+/**
+ * Extract organizations/memberships from the profile
+ */
+function extractOrganizations(): string[] {
+  const organizations: string[] = [];
+
+  const section = findSectionByHeader('Organizations');
+  if (!section) {
+    return organizations;
+  }
+
+  console.log('[Social Recall] Found Organizations section');
+  const seen = new Set<string>();
+
+  const boldSpans = section.querySelectorAll('.t-bold span[aria-hidden="true"], span.t-bold');
+
+  for (const span of boldSpans) {
+    const text = span.textContent?.trim();
+    if (!text || text.length < 2 || text.length > 150) continue;
+    if (text.includes('Show all')) continue;
+
+    const textLower = text.toLowerCase();
+    if (!seen.has(textLower)) {
+      seen.add(textLower);
+      organizations.push(text);
+    }
+  }
+
+  console.log(`[Social Recall] Extracted ${organizations.length} organizations`);
+  return organizations;
+}
+
+/**
+ * Extract interests (influencers, companies, groups, schools they follow)
+ */
+function extractInterests(): string[] {
+  const interests: string[] = [];
+
+  const section = findSectionByHeader('Interests');
+  if (!section) {
+    return interests;
+  }
+
+  console.log('[Social Recall] Found Interests section');
+  const seen = new Set<string>();
+
+  const boldSpans = section.querySelectorAll('.t-bold span[aria-hidden="true"], span.t-bold');
+
+  for (const span of boldSpans) {
+    const text = span.textContent?.trim();
+    if (!text || text.length < 2 || text.length > 150) continue;
+    if (text.includes('Show all') || text.includes('follower')) continue;
+
+    const textLower = text.toLowerCase();
+    if (!seen.has(textLower)) {
+      seen.add(textLower);
+      interests.push(text);
+    }
+  }
+
+  console.log(`[Social Recall] Extracted ${interests.length} interests`);
+  return interests;
+}
+
+/**
+ * Extract test scores (GMAT, GRE, etc.)
+ */
+function extractTestScores(): string[] {
+  const testScores: string[] = [];
+
+  const section = findSectionByHeader('Test Scores') || findSectionByHeader('Scores');
+  if (!section) {
+    return testScores;
+  }
+
+  console.log('[Social Recall] Found Test Scores section');
+
+  // Look for score-related text
+  const spans = section.querySelectorAll('span[aria-hidden="true"]');
+  for (const span of spans) {
+    const text = span.textContent?.trim();
+    if (!text || text.length < 3) continue;
+    if (text.includes('Show all')) continue;
+
+    // Look for patterns like "GMAT: 750" or "GRE Verbal: 165"
+    if (/\d/.test(text) && (text.includes(':') || text.includes('-') || /^\d+$/.test(text) === false)) {
+      testScores.push(text);
+    }
+  }
+
+  console.log(`[Social Recall] Extracted ${testScores.length} test scores`);
+  return testScores;
+}
+
+/**
+ * Extract services offered (for creator/business profiles)
+ */
+function extractServices(): string[] {
+  const services: string[] = [];
+
+  const section = findSectionByHeader('Services') || findSectionByHeader('Open to');
+  if (!section) {
+    return services;
+  }
+
+  console.log('[Social Recall] Found Services section');
+  const seen = new Set<string>();
+
+  const spans = section.querySelectorAll('span[aria-hidden="true"]');
+  for (const span of spans) {
+    const text = span.textContent?.trim();
+    if (!text || text.length < 3 || text.length > 200) continue;
+    if (text.includes('Show all')) continue;
+
+    const textLower = text.toLowerCase();
+    if (!seen.has(textLower)) {
+      seen.add(textLower);
+      services.push(text);
+    }
+  }
+
+  console.log(`[Social Recall] Extracted ${services.length} services`);
+  return services;
+}
+
+/**
+ * Wait for SSR code tags to appear in the DOM
+ * LinkedIn injects these ~500-1000ms on fast networks, longer on slow networks
+ * Using 8s timeout to handle slow connections
+ */
+async function waitForSSRCodeTags(timeout: number = 8000): Promise<NodeListOf<Element>> {
+  const startTime = Date.now();
+  const selector = 'code[id^="bpr-guid-"]';
+
+  while (Date.now() - startTime < timeout) {
+    const codeTags = document.querySelectorAll(selector);
+    if (codeTags.length > 0) {
+      console.log('[Social Recall] SSR code tags found after', Date.now() - startTime, 'ms');
+      return codeTags;
+    }
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+
+  console.log('[Social Recall] SSR code tags not found within', timeout, 'ms');
+  return document.querySelectorAll(selector);
+}
+
+/**
+ * Extract profile data embedded in LinkedIn's HTML (SSR data)
+ * LinkedIn embeds profile data in various ways:
+ * 1. <code> tags with HTML comments containing JSON
+ * 2. Script tags with inline JSON
+ * 3. application/ld+json structured data
+ */
+async function getEmbeddedProfileData(): Promise<ExtendedProfileData | null> {
   try {
-    const stored = sessionStorage.getItem(INTERCEPTED_DATA_KEY);
-    if (!stored) {
-      console.log('[Social Recall] No intercepted Voyager data found');
-      return null;
+    // Get the profile ID from the current URL to match against
+    const urlProfileId = window.location.pathname.match(/\/in\/([^/?]+)/)?.[1]?.toLowerCase();
+    console.log('[Social Recall] Looking for SSR data matching profile:', urlProfileId);
+
+    // SSR code tags already waited for in parallel (handleProfilePage)
+    // Just query them directly - they should be present
+    // LinkedIn's primary pattern: <code id="bpr-guid-XXXX"><!--{JSON}--></code>
+    const codeTags = document.querySelectorAll('code[id^="bpr-guid-"], code[id^="datalet-"], code[style*="display:none"], code[style*="display: none"]');
+    console.log('[Social Recall] Found', codeTags.length, 'hidden code tags to check');
+
+    // Collect all potential profiles, then pick the right one
+    const foundProfiles: Array<{ profile: ExtendedProfileData; codeId: string }> = [];
+
+    for (const code of codeTags) {
+      const content = (code.textContent || code.innerHTML || '').trim();
+      if (!content) continue;
+
+      // Skip datalet entries (these are request metadata, not data)
+      if (code.id.startsWith('datalet-')) continue;
+
+      // Try to parse as JSON directly (LinkedIn often stores raw JSON)
+      let jsonStr = content;
+
+      // Also check for HTML comment wrapper: <!--{...}-->
+      const commentMatch = content.match(/<!--(.+?)-->/s);
+      if (commentMatch) {
+        jsonStr = commentMatch[1].trim();
+      }
+
+      if (jsonStr.startsWith('{') || jsonStr.startsWith('[')) {
+        try {
+          const data = JSON.parse(jsonStr);
+
+          // Look for profile data in the parsed structure - get ALL profiles
+          const allProfileData = findAllProfilesInData(data);
+          for (const profileData of allProfileData) {
+            foundProfiles.push({ profile: profileData, codeId: code.id });
+          }
+        } catch {
+          // Not valid JSON, continue
+        }
+      }
     }
 
-    const dataArray = JSON.parse(stored);
-    if (!Array.isArray(dataArray) || dataArray.length === 0) {
-      return null;
+    console.log('[Social Recall] Found', foundProfiles.length, 'profiles in SSR data');
+
+    // Try to find the profile that matches the URL
+    if (urlProfileId && foundProfiles.length > 0) {
+      // Strategy 1: Exact URL ID match
+      for (const { profile, codeId } of foundProfiles) {
+        const profileId = profile.linkedinId?.toLowerCase();
+        if (profileId === urlProfileId) {
+          console.log('[Social Recall] Found matching profile in code tag:', codeId, 'linkedinId:', profileId);
+          return profile;
+        }
+      }
+
+      // Strategy 2: Vanity URL fallback - match by displayed h1 name
+      // LinkedIn allows custom vanity URLs different from internal profile IDs
+      const h1 = document.querySelector('h1');
+      const displayedName = h1?.textContent?.trim().toLowerCase();
+      if (displayedName) {
+        for (const { profile, codeId } of foundProfiles) {
+          const profileName = profile.name?.toLowerCase();
+          if (profileName && profileName === displayedName) {
+            console.log('[Social Recall] Found matching profile by name (vanity URL):', codeId, 'name:', profile.name);
+            return profile;
+          }
+        }
+      }
+
+      // If no exact match, log what we found for debugging
+      console.log('[Social Recall] No exact match. Found profiles:', foundProfiles.map(p => ({
+        id: p.profile.linkedinId,
+        name: p.profile.name,
+        codeId: p.codeId
+      })));
     }
 
-    // Get the most recent entry
-    const latest = dataArray[dataArray.length - 1];
-    if (!latest?.data) {
-      return null;
+    // If we have profiles but couldn't match, don't return the wrong one
+    if (foundProfiles.length > 0) {
+      console.log('[Social Recall] Found profiles but none matched URL or name, skipping SSR');
     }
 
-    // Parse the Voyager response
-    const parsed = parseVoyagerProfile(latest.data);
-    if (parsed) {
-      console.log('[Social Recall] Successfully parsed Voyager data:', {
-        name: parsed.name,
-        employers: parsed.employers?.length,
-        education: parsed.education?.length,
-      });
+    // Also check regular script tags
+    const scripts = document.querySelectorAll('script');
+    for (const script of scripts) {
+      const content = script.textContent || '';
+
+      if (content.includes('firstName') && content.includes('lastName') && content.includes('headline')) {
+        const jsonMatches = content.match(/\{[^{}]*"firstName"\s*:\s*"[^"]+"\s*,[^{}]*"lastName"\s*:\s*"[^"]+"\s*[^{}]*\}/g);
+
+        if (jsonMatches) {
+          for (const match of jsonMatches) {
+            try {
+              const data = JSON.parse(match);
+              if (data.firstName && data.lastName) {
+                console.log('[Social Recall] Found embedded profile data in script tag');
+                return {
+                  name: `${data.firstName} ${data.lastName}`.trim(),
+                  headline: data.headline || data.occupation || '',
+                  location: data.locationName || data.location || undefined,
+                  avatarUrl: data.profilePicture || data.photoUrl || undefined,
+                  about: data.summary || undefined,
+                  linkedinId: data.publicIdentifier || data.vanityName || undefined,
+                  employers: [],
+                  education: [],
+                };
+              }
+            } catch {
+              // Not valid JSON, continue
+            }
+          }
+        }
+      }
     }
-    return parsed;
+
+    // Look for application/ld+json structured data
+    const ldJsonScripts = document.querySelectorAll('script[type="application/ld+json"]');
+    for (const script of ldJsonScripts) {
+      try {
+        const data = JSON.parse(script.textContent || '');
+        if (data['@type'] === 'Person' && data.name) {
+          console.log('[Social Recall] Found ld+json profile data');
+          return {
+            name: data.name,
+            headline: data.jobTitle || '',
+            location: data.address?.addressLocality || undefined,
+            avatarUrl: data.image || undefined,
+            about: data.description || undefined,
+            employers: [],
+            education: [],
+          };
+        }
+      } catch {
+        // Not valid JSON, continue
+      }
+    }
+
+    console.log('[Social Recall] No embedded profile data found');
+    return null;
   } catch (e) {
-    console.error('[Social Recall] Failed to parse intercepted Voyager data:', e);
+    console.error('[Social Recall] Error extracting embedded profile data:', e);
     return null;
   }
 }
 
 /**
- * Listen for real-time Voyager data interception events
- * This allows us to get data as soon as it's intercepted without polling sessionStorage
+ * Find ALL profile data in a nested object structure
+ * Returns an array of all profiles found (for SSR data that contains multiple profiles)
  */
-function setupVoyagerDataListener(callback: (data: ExtendedProfileData) => void): () => void {
-  const handler = (event: Event) => {
-    const customEvent = event as CustomEvent;
-    if (customEvent.detail) {
-      const parsed = parseVoyagerProfile(customEvent.detail);
-      if (parsed) {
-        console.log('[Social Recall] Real-time Voyager data received');
-        callback(parsed);
+function findAllProfilesInData(data: unknown, depth = 0): ExtendedProfileData[] {
+  const profiles: ExtendedProfileData[] = [];
+
+  if (depth > 8 || !data || typeof data !== 'object') return profiles;
+
+  const obj = data as Record<string, unknown>;
+
+  // Check if this object looks like profile data (firstName + lastName)
+  if (obj.firstName && obj.lastName) {
+    // Extract linkedinId from various possible field names
+    let linkedinId: string | undefined = (obj.publicIdentifier || obj.vanityName || obj.username) as string | undefined;
+
+    // Try to extract from entityUrn (format: urn:li:fsd_profile:ACoAABxxxxxx)
+    if (!linkedinId && typeof obj.entityUrn === 'string') {
+      const urnMatch = obj.entityUrn.match(/urn:li:(?:fsd_profile|member):([^,]+)/);
+      if (urnMatch) {
+        linkedinId = urnMatch[1];
       }
     }
-  };
 
-  window.addEventListener('voyager-data-intercepted', handler);
-  return () => window.removeEventListener('voyager-data-intercepted', handler);
+    console.log('[Social Recall] findAllProfiles: Found profile with linkedinId:', linkedinId, 'name:', `${obj.firstName} ${obj.lastName}`);
+
+    profiles.push({
+      name: `${obj.firstName} ${obj.lastName}`.trim(),
+      headline: (obj.headline || obj.occupation || '') as string,
+      location: (obj.locationName || obj.geoLocationName || obj.location) as string | undefined,
+      avatarUrl: extractAvatarUrlFromSSR(obj),
+      about: (obj.summary || obj.about) as string | undefined,
+      linkedinId,
+      employers: extractEmployersFromSSR(obj),
+      education: extractEducationFromSSR(obj),
+    });
+  }
+
+  // Check 'data' property (common wrapper)
+  if (obj.data && typeof obj.data === 'object') {
+    profiles.push(...findAllProfilesInData(obj.data, depth + 1));
+  }
+
+  // Check 'included' array (Voyager pattern) - this is where multiple profiles live
+  if (Array.isArray(obj.included)) {
+    for (const item of obj.included) {
+      profiles.push(...findAllProfilesInData(item, depth + 1));
+    }
+  }
+
+  // Check 'elements' array
+  if (Array.isArray(obj.elements)) {
+    for (const item of obj.elements) {
+      profiles.push(...findAllProfilesInData(item, depth + 1));
+    }
+  }
+
+  // Check specific LinkedIn patterns
+  const keysToCheck = [
+    'profile', 'profileView', 'profileData', 'member', 'miniProfile',
+    'publicProfileTopCardV2', 'profileTopCard', 'identityDashProfilesByMemberIdentity',
+    'identityDashProfiles', '*profile', '*miniProfile'
+  ];
+
+  for (const key of keysToCheck) {
+    if (obj[key] && typeof obj[key] === 'object') {
+      profiles.push(...findAllProfilesInData(obj[key], depth + 1));
+    }
+  }
+
+  return profiles;
 }
+
+/**
+ * Recursively search for profile data in a nested object structure
+ */
+function findProfileInData(data: unknown, depth = 0): ExtendedProfileData | null {
+  if (depth > 8 || !data || typeof data !== 'object') return null;
+
+  const obj = data as Record<string, unknown>;
+
+  // Check if this object looks like profile data (firstName + lastName)
+  if (obj.firstName && obj.lastName) {
+    // Extract linkedinId from various possible field names
+    let linkedinId: string | undefined = (obj.publicIdentifier || obj.vanityName || obj.username) as string | undefined;
+
+    // Try to extract from entityUrn (format: urn:li:fsd_profile:ACoAABxxxxxx)
+    if (!linkedinId && typeof obj.entityUrn === 'string') {
+      const urnMatch = obj.entityUrn.match(/urn:li:(?:fsd_profile|member):([^,]+)/);
+      if (urnMatch) {
+        // This is a member ID, not a vanity URL - but we still need to track it
+        linkedinId = urnMatch[1];
+      }
+    }
+
+    // Try to extract from *profile key (LinkedIn dash pattern)
+    if (!linkedinId && obj['*profile'] && typeof obj['*profile'] === 'string') {
+      const profileMatch = obj['*profile'].match(/\/in\/([^/?]+)/);
+      if (profileMatch) {
+        linkedinId = profileMatch[1];
+      }
+    }
+
+    console.log('[Social Recall] Extracted profile with linkedinId:', linkedinId, 'name:', `${obj.firstName} ${obj.lastName}`);
+
+    return {
+      name: `${obj.firstName} ${obj.lastName}`.trim(),
+      headline: (obj.headline || obj.occupation || '') as string,
+      location: (obj.locationName || obj.geoLocationName || obj.location) as string | undefined,
+      avatarUrl: extractAvatarUrlFromSSR(obj),
+      about: (obj.summary || obj.about) as string | undefined,
+      linkedinId,
+      employers: extractEmployersFromSSR(obj),
+      education: extractEducationFromSSR(obj),
+    };
+  }
+
+  // Check 'data' property (common wrapper)
+  if (obj.data && typeof obj.data === 'object') {
+    const result = findProfileInData(obj.data, depth + 1);
+    if (result) return result;
+  }
+
+  // Check 'included' array (Voyager pattern)
+  if (Array.isArray(obj.included)) {
+    for (const item of obj.included) {
+      const result = findProfileInData(item, depth + 1);
+      if (result) return result;
+    }
+  }
+
+  // Check 'elements' array
+  if (Array.isArray(obj.elements)) {
+    for (const item of obj.elements) {
+      const result = findProfileInData(item, depth + 1);
+      if (result) return result;
+    }
+  }
+
+  // Check specific LinkedIn patterns
+  const keysToCheck = [
+    'profile', 'profileView', 'profileData', 'member', 'miniProfile',
+    'publicProfileTopCardV2', 'profileTopCard', 'identityDashProfilesByMemberIdentity',
+    'identityDashProfiles', '*profile', '*miniProfile'
+  ];
+
+  for (const key of keysToCheck) {
+    if (obj[key] && typeof obj[key] === 'object') {
+      const result = findProfileInData(obj[key], depth + 1);
+      if (result) return result;
+    }
+  }
+
+  // Check all object values if they might contain profile data
+  for (const value of Object.values(obj)) {
+    if (value && typeof value === 'object') {
+      // Only recurse into objects that might have profile data
+      const v = value as Record<string, unknown>;
+      if (v.firstName || v.data || v.included || v.elements || v.profile || v.member) {
+        const result = findProfileInData(value, depth + 1);
+        if (result) return result;
+      }
+    }
+  }
+
+  return null;
+}
+
+function extractAvatarUrlFromSSR(obj: Record<string, unknown>): string | undefined {
+  if (typeof obj.profilePicture === 'string') return obj.profilePicture;
+  if (typeof obj.photoUrl === 'string') return obj.photoUrl;
+
+  const pic = obj.profilePicture as Record<string, unknown> | undefined;
+  if (pic?.displayImageReference) {
+    const ref = pic.displayImageReference as Record<string, unknown>;
+    const vector = ref.vectorImage as Record<string, unknown>;
+    if (vector?.rootUrl && Array.isArray(vector.artifacts) && vector.artifacts.length > 0) {
+      const artifact = vector.artifacts[vector.artifacts.length - 1] as Record<string, unknown>;
+      if (artifact.fileIdentifyingUrlPathSegment) {
+        return `${vector.rootUrl}${artifact.fileIdentifyingUrlPathSegment}`;
+      }
+    }
+  }
+  return undefined;
+}
+
+function extractEmployersFromSSR(obj: Record<string, unknown>): Employer[] {
+  const employers: Employer[] = [];
+
+  // Check for positions in included array or direct property
+  const positions = (obj.positions || obj.positionGroups || []) as unknown[];
+
+  if (Array.isArray(positions)) {
+    for (const pos of positions) {
+      const p = pos as Record<string, unknown>;
+      if (p.companyName) {
+        employers.push({
+          company: p.companyName as string,
+          logo: (p.companyLogoUrl || p.logo) as string || '',
+        });
+      }
+    }
+  }
+
+  return employers;
+}
+
+function extractEducationFromSSR(obj: Record<string, unknown>): Education[] {
+  const education: Education[] = [];
+
+  const eduList = (obj.education || obj.educations || []) as unknown[];
+
+  if (Array.isArray(eduList)) {
+    for (const edu of eduList) {
+      const e = edu as Record<string, unknown>;
+      if (e.schoolName) {
+        education.push({
+          school: e.schoolName as string,
+          degree: e.degreeName as string | undefined,
+          field: e.fieldOfStudy as string | undefined,
+        });
+      }
+    }
+  }
+
+  return education;
+}
+
 
 /**
  * Get stored profile data
@@ -2131,6 +2726,17 @@ async function mergeProfileData(
     certifications: newData.certifications,
     activities: newData.activities,
   };
+
+  // Skip API calls when testing data extraction
+  if (DISABLE_API_WRITES) {
+    console.log('[Social Recall] API writes disabled (DISABLE_API_WRITES=true). Using local heuristics.');
+    console.log('[Social Recall] Extracted profile data:', JSON.stringify(aiProfileData, null, 2));
+    const syncResult = mergeProfileDataSync(newData, storedData);
+    if (historyUpdates.length > 0) {
+      syncResult.history = historyUpdates;
+    }
+    return syncResult;
+  }
 
   try {
     const apiUrl = await getApiUrl();

@@ -16,11 +16,6 @@
   "content_scripts": [
     {
       "matches": ["*://*.linkedin.com/*"],
-      "js": ["voyager-interceptor.js"],
-      "run_at": "document_start"
-    },
-    {
-      "matches": ["*://*.linkedin.com/*"],
       "js": ["content.js"],
       "css": ["panel.css"],
       "run_at": "document_idle"

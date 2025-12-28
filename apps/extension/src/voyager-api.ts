@@ -207,7 +207,8 @@ export function createInterceptorScript(): string {
       if (isProfileUrl(url)) {
         const clone = response.clone();
         clone.json().then(data => {
-          if (data && (data.data || data.included)) {
+          // Capture any non-empty object response from profile URLs
+          if (data && typeof data === 'object' && Object.keys(data).length > 0) {
             postProfileData(url, data);
           }
         }).catch(() => {});
@@ -231,7 +232,8 @@ export function createInterceptorScript(): string {
       this.addEventListener('load', function() {
         try {
           const data = JSON.parse(this.responseText);
-          if (data && (data.data || data.included)) {
+          // Capture any non-empty object response from profile URLs
+          if (data && typeof data === 'object' && Object.keys(data).length > 0) {
             postProfileData(this._voyagerUrl, data);
           }
         } catch (e) {}
