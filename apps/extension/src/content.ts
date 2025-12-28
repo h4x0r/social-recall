@@ -1218,8 +1218,9 @@ async function mergeProfileData(
     logger.debug('AI result skills:', result?.skills);
     logger.debug('AI result error:', result?.error);
 
-    if (result.success && result.archetype) {
-      // AI inference succeeded - map to 11 core archetypes + Unknown
+    // Accept AI results if successful, even if archetype parsing failed
+    if (result.success) {
+      // Map AI archetype to enum, defaulting to Unknown if missing/invalid
       const archetypeMap: Record<string, Archetype> = {
         builder: Archetype.Builder,
         advisor: Archetype.Advisor,
@@ -1257,7 +1258,9 @@ async function mergeProfileData(
         services: newData.services,
         firstSeen: storedData?.firstSeen || now,
         lastSeen: now,
-        archetype: archetypeMap[result.archetype] || Archetype.Unknown,
+        archetype: result.archetype
+          ? (archetypeMap[result.archetype] || (logger.debug('Unknown archetype from AI:', result.archetype), Archetype.Unknown))
+          : (logger.debug('No archetype returned from AI'), Archetype.Unknown),
         // Use AI-derived skills, fall back to scraped skills if AI returns none
         skills: result.skills?.length ? result.skills.map(s => s.name) : (newData.skills || []),
         couldBe: result.couldBe || inferCouldBe(newData),
