@@ -1,3 +1,4 @@
 
 # Playwright auth data
 .auth/
+test-results/
