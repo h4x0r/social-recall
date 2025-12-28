@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { logger, LogLevel, setLogLevel, getLogLevel } from './logger';
+import { logger, setLogLevel, getLogLevel } from './logger';
 
 describe('logger', () => {
   let consoleSpy: {
@@ -28,55 +28,58 @@ describe('logger', () => {
   });
 
   describe('log methods', () => {
-    it('logger.debug logs with [Social Recall] prefix and module', () => {
-      logger.debug('SSR', 'Found profile');
+    it('logger.debug logs with [Social Recall] prefix', () => {
+      logger.debug('Found profile');
       expect(consoleSpy.debug).toHaveBeenCalledWith(
-        '[Social Recall] [SSR]',
+        '[Social Recall]',
         'Found profile'
       );
     });
 
-    it('logger.info logs with [Social Recall] prefix and module', () => {
-      logger.info('Panel', 'Initialized');
+    it('logger.info logs with [Social Recall] prefix', () => {
+      logger.info('Initialized');
       expect(consoleSpy.log).toHaveBeenCalledWith(
-        '[Social Recall] [Panel]',
+        '[Social Recall]',
         'Initialized'
       );
     });
 
-    it('logger.warn logs with [Social Recall] prefix and module', () => {
-      logger.warn('Storage', 'Context invalid');
+    it('logger.warn logs with [Social Recall] prefix', () => {
+      logger.warn('Context invalid');
       expect(consoleSpy.warn).toHaveBeenCalledWith(
-        '[Social Recall] [Storage]',
+        '[Social Recall]',
         'Context invalid'
       );
     });
 
-    it('logger.error logs with [Social Recall] prefix and module', () => {
-      logger.error('AI', 'Request failed');
+    it('logger.error logs with [Social Recall] prefix', () => {
+      logger.error('Request failed');
       expect(consoleSpy.error).toHaveBeenCalledWith(
-        '[Social Recall] [AI]',
+        '[Social Recall]',
         'Request failed'
       );
     });
   });
 
-  describe('data parameter', () => {
-    it('includes data object when provided', () => {
+  describe('multiple arguments', () => {
+    it('passes multiple arguments through', () => {
       const data = { linkedinId: 'john-doe', name: 'John Doe' };
-      logger.info('SSR', 'Found profile', data);
+      logger.info('Found profile', data);
       expect(consoleSpy.log).toHaveBeenCalledWith(
-        '[Social Recall] [SSR]',
+        '[Social Recall]',
         'Found profile',
         data
       );
     });
 
-    it('handles undefined data gracefully', () => {
-      logger.info('Test', 'Message', undefined);
-      expect(consoleSpy.log).toHaveBeenCalledWith(
-        '[Social Recall] [Test]',
-        'Message'
+    it('handles many arguments', () => {
+      logger.debug('Value is', 42, 'and', true);
+      expect(consoleSpy.debug).toHaveBeenCalledWith(
+        '[Social Recall]',
+        'Value is',
+        42,
+        'and',
+        true
       );
     });
   });
@@ -84,10 +87,10 @@ describe('logger', () => {
   describe('log levels', () => {
     it('respects log level - debug shows all', () => {
       setLogLevel('debug');
-      logger.debug('M', 'debug msg');
-      logger.info('M', 'info msg');
-      logger.warn('M', 'warn msg');
-      logger.error('M', 'error msg');
+      logger.debug('debug msg');
+      logger.info('info msg');
+      logger.warn('warn msg');
+      logger.error('error msg');
 
       expect(consoleSpy.debug).toHaveBeenCalledTimes(1);
       expect(consoleSpy.log).toHaveBeenCalledTimes(1);
@@ -97,8 +100,8 @@ describe('logger', () => {
 
     it('respects log level - info hides debug', () => {
       setLogLevel('info');
-      logger.debug('M', 'debug msg');
-      logger.info('M', 'info msg');
+      logger.debug('debug msg');
+      logger.info('info msg');
 
       expect(consoleSpy.debug).not.toHaveBeenCalled();
       expect(consoleSpy.log).toHaveBeenCalledTimes(1);
@@ -106,9 +109,9 @@ describe('logger', () => {
 
     it('respects log level - warn hides debug and info', () => {
       setLogLevel('warn');
-      logger.debug('M', 'debug msg');
-      logger.info('M', 'info msg');
-      logger.warn('M', 'warn msg');
+      logger.debug('debug msg');
+      logger.info('info msg');
+      logger.warn('warn msg');
 
       expect(consoleSpy.debug).not.toHaveBeenCalled();
       expect(consoleSpy.log).not.toHaveBeenCalled();
@@ -117,10 +120,10 @@ describe('logger', () => {
 
     it('respects log level - error hides all except error', () => {
       setLogLevel('error');
-      logger.debug('M', 'debug msg');
-      logger.info('M', 'info msg');
-      logger.warn('M', 'warn msg');
-      logger.error('M', 'error msg');
+      logger.debug('debug msg');
+      logger.info('info msg');
+      logger.warn('warn msg');
+      logger.error('error msg');
 
       expect(consoleSpy.debug).not.toHaveBeenCalled();
       expect(consoleSpy.log).not.toHaveBeenCalled();
@@ -135,20 +138,22 @@ describe('logger', () => {
   });
 
   describe('module-specific loggers', () => {
-    it('logger.forModule creates a bound logger', () => {
+    it('logger.forModule creates a bound logger with module prefix', () => {
       const ssrLogger = logger.forModule('SSR');
       ssrLogger.info('Found data');
       expect(consoleSpy.log).toHaveBeenCalledWith(
-        '[Social Recall] [SSR]',
+        '[Social Recall]',
+        '[SSR]',
         'Found data'
       );
     });
 
-    it('module logger preserves data parameter', () => {
+    it('module logger passes multiple arguments', () => {
       const panelLogger = logger.forModule('Panel');
       panelLogger.debug('State', { expanded: true });
       expect(consoleSpy.debug).toHaveBeenCalledWith(
-        '[Social Recall] [Panel]',
+        '[Social Recall]',
+        '[Panel]',
         'State',
         { expanded: true }
       );

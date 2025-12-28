@@ -14,7 +14,7 @@ const LOG_LEVELS: Record<LogLevel, number> = {
 
 const PREFIX = '[Social Recall]';
 
-let currentLevel: LogLevel = 'info';
+let currentLevel: LogLevel = 'debug';
 
 /**
  * Set the minimum log level
@@ -45,69 +45,63 @@ function formatPrefix(module: string): string {
 }
 
 /**
- * Core logging function
+ * Core logging function - simplified to just prefix + args
  */
 function log(
   level: LogLevel,
-  module: string,
-  message: string,
-  data?: unknown
+  ...args: unknown[]
 ): void {
   if (!shouldLog(level)) return;
 
-  const prefix = formatPrefix(module);
   const consoleFn = level === 'debug' ? console.debug
     : level === 'info' ? console.log
     : level === 'warn' ? console.warn
     : console.error;
 
-  if (data !== undefined) {
-    consoleFn(prefix, message, data);
-  } else {
-    consoleFn(prefix, message);
-  }
+  consoleFn(PREFIX, ...args);
 }
 
 /**
  * Module-specific logger interface
  */
 interface ModuleLogger {
-  debug: (message: string, data?: unknown) => void;
-  info: (message: string, data?: unknown) => void;
-  warn: (message: string, data?: unknown) => void;
-  error: (message: string, data?: unknown) => void;
+  debug: (...args: unknown[]) => void;
+  info: (...args: unknown[]) => void;
+  warn: (...args: unknown[]) => void;
+  error: (...args: unknown[]) => void;
 }
 
 /**
  * Main logger object with methods for each log level
+ * Simple API: logger.debug('message', data1, data2, ...)
  */
 export const logger = {
   /**
    * Debug level - detailed information for debugging
    */
-  debug(module: string, message: string, data?: unknown): void {
-    log('debug', module, message, data);
+  debug(...args: unknown[]): void {
+    log('debug', ...args);
   },
 
   /**
    * Info level - general information about operations
    */
-  info(module: string, message: string, data?: unknown): void {
-    log('info', module, message, data);
+  info(...args: unknown[]): void {
+    log('info', ...args);
   },
 
   /**
    * Warn level - potential issues that don't prevent operation
    */
-  warn(module: string, message: string, data?: unknown): void {
-    log('warn', module, message, data);
+  warn(...args: unknown[]): void {
+    log('warn', ...args);
   },
 
   /**
    * Error level - errors that may affect functionality
    */
-  error(module: string, message: string, data?: unknown): void {
-    log('error', module, message, data);
+  error(...args: unknown[]): void {
+    log('error', ...args);
   },
 
   /**
@@ -115,11 +109,12 @@ export const logger = {
    * Useful for reducing repetition in a single file
    */
   forModule(module: string): ModuleLogger {
+    const modulePrefix = `[${module}]`;
     return {
-      debug: (message: string, data?: unknown) => log('debug', module, message, data),
-      info: (message: string, data?: unknown) => log('info', module, message, data),
-      warn: (message: string, data?: unknown) => log('warn', module, message, data),
-      error: (message: string, data?: unknown) => log('error', module, message, data),
+      debug: (...args: unknown[]) => log('debug', modulePrefix, ...args),
+      info: (...args: unknown[]) => log('info', modulePrefix, ...args),
+      warn: (...args: unknown[]) => log('warn', modulePrefix, ...args),
+      error: (...args: unknown[]) => log('error', modulePrefix, ...args),
     };
   },
 };
