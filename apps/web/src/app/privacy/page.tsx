@@ -200,7 +200,7 @@ export default function PrivacyPage() {
               For questions about this privacy policy or your data:
             </p>
             <ul className="list-disc list-inside text-neutral-300 space-y-1 ml-4 mt-2">
-              <li>Email: privacy@social-recall.app</li>
+              <li>Email: <a href="mailto:privacy@socialrecall.now" className="text-blue-400 hover:underline">privacy@socialrecall.now</a></li>
               <li>GitHub: <a href="https://github.com/h4x0r/social-recall/issues" className="text-blue-400 hover:underline">github.com/h4x0r/social-recall/issues</a></li>
             </ul>
           </section>
