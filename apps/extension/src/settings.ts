@@ -10,6 +10,7 @@ import {
   getUserInfo,
 } from './sync';
 import { handleConnect, setupAuthMessageListener } from './popup-auth';
+import { getConsent, revokeConsent, grantConsent, type ConsentRecord } from './consent';
 
 interface SocialNote {
   name: string;
@@ -86,6 +87,59 @@ document.addEventListener('DOMContentLoaded', async (): Promise<void> => {
   // Import button
   if (importBtn) {
     importBtn.addEventListener('click', importData);
+  }
+
+  // Consent management
+  const consentStatus = document.getElementById('consentStatus') as HTMLElement;
+  const revokeConsentBtn = document.getElementById('revokeConsentBtn') as HTMLButtonElement;
+  const grantConsentBtn = document.getElementById('grantConsentBtn') as HTMLButtonElement;
+
+  await updateConsentUI();
+
+  if (revokeConsentBtn) {
+    revokeConsentBtn.addEventListener('click', async () => {
+      if (confirm('Are you sure you want to revoke your consent? This will stop data collection to our servers.')) {
+        await revokeConsent();
+        await updateConsentUI();
+        showToast('Consent revoked. Data collection stopped.', 'info');
+      }
+    });
+  }
+
+  if (grantConsentBtn) {
+    grantConsentBtn.addEventListener('click', async () => {
+      try {
+        const apiUrl = await getWebAppUrl();
+        await grantConsent(apiUrl);
+        await updateConsentUI();
+        showToast('Consent granted. Data collection enabled.', 'success');
+      } catch (error) {
+        showToast('Failed to grant consent. Please try again.', 'error');
+      }
+    });
+  }
+
+  async function updateConsentUI(): Promise<void> {
+    const consent = await getConsent();
+
+    if (!consent) {
+      // No consent record exists
+      if (consentStatus) consentStatus.textContent = 'No consent given yet';
+      if (revokeConsentBtn) revokeConsentBtn.style.display = 'none';
+      if (grantConsentBtn) grantConsentBtn.style.display = 'flex';
+    } else if (consent.given) {
+      // Active consent
+      const date = new Date(consent.timestamp).toLocaleDateString();
+      if (consentStatus) consentStatus.textContent = `Consent granted on ${date}`;
+      if (revokeConsentBtn) revokeConsentBtn.style.display = 'flex';
+      if (grantConsentBtn) grantConsentBtn.style.display = 'none';
+    } else {
+      // Consent was revoked
+      const revokedDate = consent.revokedAt ? new Date(consent.revokedAt).toLocaleDateString() : 'unknown date';
+      if (consentStatus) consentStatus.textContent = `Consent revoked on ${revokedDate}`;
+      if (revokeConsentBtn) revokeConsentBtn.style.display = 'none';
+      if (grantConsentBtn) grantConsentBtn.style.display = 'flex';
+    }
   }
 
   async function updateUI(): Promise<void> {

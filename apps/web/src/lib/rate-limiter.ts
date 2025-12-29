@@ -122,6 +122,11 @@ export const RATE_LIMIT_CONFIG = {
     maxRequests: 10,
     windowMs: 60000, // 10 per minute
   },
+  // Consent logging - generous limit (one-time operation)
+  consent: {
+    maxRequests: 5,
+    windowMs: 300000, // 5 per 5 minutes
+  },
   // General API - default
   default: {
     maxRequests: 30,

@@ -263,6 +263,9 @@ export interface Panel {
   editTemplate: (id: string, updates: Partial<Omit<NoteTemplate, 'id'>>) => void;
   deleteTemplate: (id: string) => void;
   showTemplatesManager: () => void;
+  showConsentOverlay: () => void;
+  hideConsentOverlay: () => void;
+  onConsentAccept: (callback: () => void) => void;
   destroy: () => void;
 }
 
@@ -299,6 +302,25 @@ function formatRelativeTime(date: Date): string {
     return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
   }
   return 'today';
+}
+
+/**
+ * Filter history entries to only show meaningful changes.
+ * Excludes entries from the same day as firstSeen (initial data capture).
+ */
+function filterMeaningfulHistory(history: HistoryEntry[], firstSeen?: Date): HistoryEntry[] {
+  if (!history || !firstSeen) return history || [];
+
+  // Get firstSeen date at midnight for comparison
+  const firstSeenDate = new Date(firstSeen);
+  firstSeenDate.setHours(0, 0, 0, 0);
+
+  return history.filter(entry => {
+    const entryDate = new Date(entry.date);
+    entryDate.setHours(0, 0, 0, 0);
+    // Only show entries from days AFTER the first seen date
+    return entryDate.getTime() > firstSeenDate.getTime();
+  });
 }
 
 function formatHistoryEntry(entry: HistoryEntry): string {
@@ -432,6 +454,7 @@ export function createPanel(container: HTMLElement): Panel {
   let networkContacts: NetworkContact[] = [];
   let currentIntroduction: IntroductionInfo | null = null;
   let bulkTagCallback: ((profileIds: string[], tagName: string) => void) | null = null;
+  let consentAcceptCallback: (() => void) | null = null;
   let bulkSelectMode = false;
   let selectedProfiles: Set<string> = new Set();
   let currentStats: ContactStats | null = null;
@@ -557,11 +580,6 @@ export function createPanel(container: HTMLElement): Panel {
           <span class="sr-panel__label">GOOD FOR</span>
           ${intelligence.goodFor.join(' · ')}
         </div>
-        ${intelligence.firstSeen ? `
-          <div class="sr-panel__first-seen">
-            First seen ${formatRelativeTime(intelligence.firstSeen)}
-          </div>
-        ` : ''}
         ${currentIntroduction && (currentIntroduction.introducedBy || currentIntroduction.metAt) ? `
           <div class="sr-panel__introduction">
             ${currentIntroduction.introducedBy ? `
@@ -578,16 +596,19 @@ export function createPanel(container: HTMLElement): Panel {
             ` : ''}
           </div>
         ` : ''}
-        ${intelligence.history && intelligence.history.length > 0 ? `
+        ${(() => {
+          const meaningfulHistory = filterMeaningfulHistory(intelligence.history || [], intelligence.firstSeen);
+          return meaningfulHistory.length > 0 ? `
           <div class="sr-panel__history-section">
             <span class="sr-panel__label">HISTORY</span>
             <div class="sr-panel__history-entries">
-              ${intelligence.history.slice(-5).reverse().map(entry =>
+              ${meaningfulHistory.slice(-5).reverse().map(entry =>
                 `<div class="sr-panel__history-entry">${formatHistoryEntry(entry)}</div>`
               ).join('')}
             </div>
           </div>
-        ` : ''}
+        ` : '';
+        })()}
         ${currentStats ? `
           <div class="sr-panel__stats">
             <span class="sr-panel__label">STATS</span>
@@ -610,6 +631,9 @@ export function createPanel(container: HTMLElement): Panel {
               </div>
             </div>
           </div>
+        ` : ''}
+        ${intelligence.firstSeen ? `
+          <div class="sr-panel__first-seen">First seen ${formatRelativeTime(intelligence.firstSeen)}</div>
         ` : ''}
       </div>
       <div class="sr-panel__footer">
@@ -1488,45 +1512,43 @@ export function createPanel(container: HTMLElement): Panel {
       }).join('');
     }
 
+    // Don't show notes section if there are no notes
     if (notes.length === 0) {
-      notesSection.innerHTML = `
-        <div class="sr-panel__notes-header">
-          <span class="sr-panel__label">NOTES</span>
-          <button class="sr-panel__notes-sort" title="${sortTitle}">${sortArrow}</button>
-        </div>
-        <div class="sr-panel__notes-empty">No notes yet</div>
-      `;
-    } else {
-      notesSection.innerHTML = `
-        <div class="sr-panel__notes-header">
-          <span class="sr-panel__label">NOTES</span>
-          <input type="text" class="sr-panel__notes-search" placeholder="Search notes..." />
-          <button class="sr-panel__notes-sort" title="${sortTitle}">${sortArrow}</button>
-        </div>
-        <div class="sr-panel__notes-list">${renderNotesList()}</div>
-      `;
-
-      // Wire up search input
-      const searchInput = notesSection.querySelector('.sr-panel__notes-search') as HTMLInputElement;
-      searchInput?.addEventListener('input', () => {
-        const query = searchInput.value.trim();
-        const notesList = notesSection.querySelector('.sr-panel__notes-list');
-        if (notesList) {
-          notesList.innerHTML = renderNotesList(query);
-          wireUpNoteButtons(notesSection);
-        }
-      });
+      return;
     }
 
-    // Insert before footer or at end of body
-    const footer = content.querySelector('.sr-panel__footer');
+    notesSection.innerHTML = `
+      <div class="sr-panel__notes-header">
+        <span class="sr-panel__label">NOTES</span>
+        <input type="text" class="sr-panel__notes-search" placeholder="Search notes..." />
+        <button class="sr-panel__notes-sort" title="${sortTitle}">${sortArrow}</button>
+      </div>
+      <div class="sr-panel__notes-list">${renderNotesList()}</div>
+    `;
+
+    // Wire up search input
+    const searchInput = notesSection.querySelector('.sr-panel__notes-search') as HTMLInputElement;
+    searchInput?.addEventListener('input', () => {
+      const query = searchInput.value.trim();
+      const notesList = notesSection.querySelector('.sr-panel__notes-list');
+      if (notesList) {
+        notesList.innerHTML = renderNotesList(query);
+        wireUpNoteButtons(notesSection);
+      }
+    });
+
+    // Insert notes at end of body (so footer stays at bottom)
     const body = content.querySelector('.sr-panel__body');
-    if (footer) {
-      footer.insertAdjacentElement('beforebegin', notesSection);
-    } else if (body) {
+    if (body) {
       body.appendChild(notesSection);
     } else {
-      content.appendChild(notesSection);
+      // Fallback: insert before footer
+      const footer = content.querySelector('.sr-panel__footer');
+      if (footer) {
+        footer.insertAdjacentElement('beforebegin', notesSection);
+      } else {
+        content.appendChild(notesSection);
+      }
     }
 
     // Wire up sort button
@@ -1703,15 +1725,17 @@ export function createPanel(container: HTMLElement): Panel {
         <div class="sr-panel__notes-loading">Loading notes...</div>
       `;
 
-      // Insert before footer or at end of body
-      const footer = content.querySelector('.sr-panel__footer');
+      // Insert into body (so footer stays at bottom)
       const body = content.querySelector('.sr-panel__body');
-      if (footer) {
-        footer.insertAdjacentElement('beforebegin', loadingSection);
-      } else if (body) {
+      if (body) {
         body.appendChild(loadingSection);
       } else {
-        content.appendChild(loadingSection);
+        const footer = content.querySelector('.sr-panel__footer');
+        if (footer) {
+          footer.insertAdjacentElement('beforebegin', loadingSection);
+        } else {
+          content.appendChild(loadingSection);
+        }
       }
     } else {
       // Remove loading indicator
@@ -2221,6 +2245,78 @@ export function createPanel(container: HTMLElement): Panel {
     }
   }
 
+  function showConsentOverlay(): void {
+    // Remove existing overlay if any
+    const existingOverlay = document.querySelector('.sr-consent-modal');
+    if (existingOverlay) return;
+
+    const modal = document.createElement('div');
+    modal.className = 'sr-consent-modal';
+    modal.innerHTML = `
+      <div class="sr-consent-modal__backdrop"></div>
+      <div class="sr-consent-modal__container">
+        <div class="sr-consent-modal__border-top"></div>
+        <div class="sr-consent-modal__content">
+          <div class="sr-consent-modal__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M12 9v4m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4c-.77-1.33-2.69-1.33-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z"/>
+            </svg>
+          </div>
+          <div class="sr-consent-modal__label">NOTICE</div>
+          <h2 class="sr-consent-modal__title">Authenticated Proxy</h2>
+          <div class="sr-consent-modal__divider">
+            <span class="sr-consent-modal__diamond">◆</span>
+          </div>
+          <div class="sr-consent-modal__text">
+            <p>This extension captures LinkedIn profile data visible through <strong>your authenticated session</strong>.</p>
+            <p>This includes connection-restricted information accessible only through your credentials.</p>
+            <p><strong>Consent is required</strong> for AI-powered analysis and server synchronization.</p>
+            <p class="sr-consent-modal__highlight">By proceeding, you consent to act as a data collection proxy.</p>
+          </div>
+          <a href="https://socialrecall.now/privacy" target="_blank" class="sr-consent-modal__privacy-link">
+            <span>Read Full Privacy Policy</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/>
+            </svg>
+          </a>
+          <button class="sr-consent-modal__accept">
+            <span class="sr-consent-modal__accept-text">I Understand & Accept</span>
+          </button>
+          <p class="sr-consent-modal__footnote">You can revoke consent anytime in Settings</p>
+        </div>
+        <div class="sr-consent-modal__border-bottom"></div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    // Animate in
+    requestAnimationFrame(() => {
+      modal.classList.add('sr-consent-modal--visible');
+    });
+
+    // Wire up accept button
+    const acceptBtn = modal.querySelector('.sr-consent-modal__accept');
+    acceptBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (consentAcceptCallback) {
+        consentAcceptCallback();
+      }
+    });
+  }
+
+  function hideConsentOverlay(): void {
+    const modal = document.querySelector('.sr-consent-modal');
+    if (modal) {
+      modal.classList.remove('sr-consent-modal--visible');
+      setTimeout(() => modal.remove(), 300);
+    }
+  }
+
+  function onConsentAccept(callback: () => void): void {
+    consentAcceptCallback = callback;
+  }
+
   function showIntroductionForm(): void {
     // Remove existing form if any
     const existingForm = content.querySelector('.sr-panel__introduction-form');
@@ -2638,6 +2734,9 @@ export function createPanel(container: HTMLElement): Panel {
     editTemplate,
     deleteTemplate,
     showTemplatesManager,
+    showConsentOverlay,
+    hideConsentOverlay,
+    onConsentAccept,
     destroy,
   };
 }

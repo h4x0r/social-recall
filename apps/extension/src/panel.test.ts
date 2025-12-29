@@ -548,16 +548,16 @@ describe('Floating Intelligence Panel', () => {
       expect(noteItems[0].textContent).toContain('Follow up about partnership');
     });
 
-    it('shows empty state when no notes', () => {
+    it('hides notes section when no notes', () => {
       const panel = createPanel(container);
       panel.setIntelligence(baseIntelligence);
       panel.toggle();
 
       panel.setNotes([]);
 
-      const emptyState = panel.element.querySelector('.sr-panel__notes-empty');
-      expect(emptyState).not.toBeNull();
-      expect(emptyState?.textContent).toContain('No notes');
+      // Notes section should not be present when there are no notes
+      const notesSection = panel.element.querySelector('.sr-panel__notes-section');
+      expect(notesSection).toBeNull();
     });
 
     it('displays relative time for notes', () => {
@@ -591,7 +591,8 @@ describe('Floating Intelligence Panel', () => {
 
       panel.setNotes([]);
       expect(panel.element.querySelectorAll('.sr-panel__note-item').length).toBe(0);
-      expect(panel.element.querySelector('.sr-panel__notes-empty')).not.toBeNull();
+      // Notes section should be removed entirely when no notes
+      expect(panel.element.querySelector('.sr-panel__notes-section')).toBeNull();
     });
 
     it('shows edit and delete buttons on each note', () => {
@@ -2669,6 +2670,91 @@ describe('Floating Intelligence Panel', () => {
 
       expect(panel.getTemplates().length).toBe(initialCount + 1);
       expect(panel.getTemplates().some(t => t.name === 'New from Manager')).toBe(true);
+    });
+  });
+
+  describe('consent overlay', () => {
+    afterEach(() => {
+      // Clean up any modals left on document.body
+      document.querySelectorAll('.sr-consent-modal').forEach(el => el.remove());
+    });
+
+    it('shows consent overlay when showConsentOverlay is called', () => {
+      const panel = createPanel(container);
+
+      panel.showConsentOverlay();
+
+      // Modal is appended to document.body, not the panel element
+      const overlay = document.querySelector('.sr-consent-modal');
+      expect(overlay).not.toBeNull();
+    });
+
+    it('displays authenticated proxy warning text', () => {
+      const panel = createPanel(container);
+
+      panel.showConsentOverlay();
+
+      const modal = document.querySelector('.sr-consent-modal');
+      expect(modal?.textContent?.toLowerCase()).toContain('authenticated proxy');
+    });
+
+    it('has accept button', () => {
+      const panel = createPanel(container);
+
+      panel.showConsentOverlay();
+
+      const acceptBtn = document.querySelector('.sr-consent-modal__accept');
+      expect(acceptBtn).not.toBeNull();
+      expect(acceptBtn?.textContent).toContain('Accept');
+    });
+
+    it('has privacy policy link', () => {
+      const panel = createPanel(container);
+
+      panel.showConsentOverlay();
+
+      const privacyLink = document.querySelector('.sr-consent-modal__privacy-link');
+      expect(privacyLink).not.toBeNull();
+    });
+
+    it('calls onConsentAccept callback when accept button clicked', () => {
+      const panel = createPanel(container);
+      const mockCallback = vi.fn();
+      panel.onConsentAccept(mockCallback);
+
+      panel.showConsentOverlay();
+      const acceptBtn = document.querySelector('.sr-consent-modal__accept') as HTMLButtonElement;
+      acceptBtn?.click();
+
+      expect(mockCallback).toHaveBeenCalled();
+    });
+
+    it('hides consent overlay when hideConsentOverlay is called', () => {
+      vi.useFakeTimers();
+
+      const panel = createPanel(container);
+      panel.showConsentOverlay();
+
+      panel.hideConsentOverlay();
+
+      // After animation (300ms), modal should be removed
+      vi.advanceTimersByTime(350);
+
+      const overlay = document.querySelector('.sr-consent-modal');
+      expect(overlay).toBeNull();
+
+      vi.useRealTimers();
+    });
+
+    it('creates full-page modal overlay on document.body', () => {
+      const panel = createPanel(container);
+      panel.toggle(); // expand
+
+      panel.showConsentOverlay();
+
+      // Verify it's a direct child of body, not inside panel
+      const modal = document.querySelector('body > .sr-consent-modal');
+      expect(modal).not.toBeNull();
     });
   });
 });

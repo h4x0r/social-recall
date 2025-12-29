@@ -467,6 +467,37 @@ export interface ContactWithRelations extends DbContact {
   notes: DbContactNote[];
 }
 
+// =============================================================================
+// CONSENT LOGS (GDPR Compliance)
+// =============================================================================
+
+export interface DbConsentLog {
+  id: string;
+  extension_version: string;
+  consent_text_version: string;
+  user_agent: string;
+  ip_address: string;
+  given: boolean;
+  revoked_at: string | null;
+  user_id: string | null;
+  created_at: string;
+}
+
+export interface DbConsentLogInsert {
+  extension_version: string;
+  consent_text_version: string;
+  user_agent: string;
+  ip_address: string;
+  given?: boolean;
+  user_id?: string | null;
+}
+
+export interface DbConsentLogUpdate {
+  given?: boolean;
+  revoked_at?: string | null;
+  ip_address?: string; // For anonymization on data deletion
+}
+
 // Database type definition for Supabase client
 export interface Database {
   public: {
@@ -563,6 +594,13 @@ export interface Database {
         Row: DbUserProfileTag;
         Insert: Omit<DbUserProfileTag, 'created_at'>;
         Update: never;
+      };
+
+      // Consent logging for GDPR compliance
+      consent_logs: {
+        Row: DbConsentLog;
+        Insert: DbConsentLogInsert;
+        Update: DbConsentLogUpdate;
       };
     };
   };

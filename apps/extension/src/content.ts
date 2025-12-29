@@ -27,7 +27,7 @@ import {
   type Volunteering,
   type Certification,
   type Activity,
-  type ExtendedProfileData,
+  type Project,
   isExtensionContextValid,
   wait,
 } from './types';
@@ -37,7 +37,6 @@ import {
   extractHeadline,
   extractLocation,
   extractAvatarUrl,
-  findSectionByHeader,
   extractEmployers,
   extractAbout,
   extractEducation,
@@ -54,16 +53,8 @@ import {
   extractLanguages,
   extractTestScores,
   extractServices,
+  extractProjects,
 } from './dom-extractors';
-import {
-  waitForSSRCodeTags,
-  getEmbeddedProfileData,
-  findAllProfilesInData,
-  findProfileInData,
-  extractAvatarUrlFromSSR,
-  extractEmployersFromSSR,
-  extractEducationFromSSR,
-} from './ssr-extractors';
 import {
   getStoredProfile,
   saveProfile,
@@ -78,6 +69,7 @@ import {
   inferGoodFor,
 } from './profile-merge';
 import { logger } from './logger';
+import { hasConsent, grantConsent, getConsent } from './consent';
 
 
 // AI skills version - bump this to force re-inference for all cached profiles
@@ -108,6 +100,7 @@ interface StoredProfile {
   interests?: string[];
   testScores?: string[];
   services?: string[];
+  projects?: Project[];
   archetype?: Archetype;
   couldBe?: string[];
   goodFor?: string[];
@@ -321,6 +314,29 @@ function initialize(): void {
 
   // Setup drag functionality
   setupDragListeners();
+
+  // Setup consent accept callback
+  panel.onConsentAccept(async () => {
+    logger.debug('Consent accepted, granting consent...');
+    try {
+      const apiUrl = await getApiUrl();
+      await grantConsent(apiUrl);
+      logger.debug('Consent granted successfully');
+      panel?.hideConsentOverlay();
+    } catch (error) {
+      logger.error('Failed to grant consent:', error);
+      // Still hide overlay - user accepted, just logging failed
+      panel?.hideConsentOverlay();
+    }
+  });
+
+  // Check consent status and show overlay if needed
+  hasConsent().then(consented => {
+    if (!consented && panel) {
+      logger.debug('No consent found, showing consent overlay');
+      panel.showConsentOverlay();
+    }
+  });
 
   // If on profile page, extract and display profile intelligence
   if (isLinkedInProfileUrl(window.location.href)) {
@@ -587,14 +603,8 @@ async function handleProfilePage(): Promise<void> {
   // Show loading progress during initial wait
   updateProgress('loading', startTime);
 
-  // Wait for both in parallel:
-  // 1. SSR code tags (appear ~500-1000ms after page load)
-  // 2. Lazy-loaded sections (LinkedIn loads all after ~3s regardless of scroll)
-  // These are independent - no need to wait sequentially
-  await Promise.all([
-    waitForSSRCodeTags(8000),  // SSR tags (usually fast, 8s timeout for slow networks)
-    waitForCompleteProfile({ timeout: 15000 }),  // Lazy load sections (3s wait inside)
-  ]);
+  // Wait for lazy-loaded sections (LinkedIn loads all after ~3s regardless of scroll)
+  await waitForCompleteProfile({ timeout: 15000 });
 
   // Re-check context validity after wait
   if (!isExtensionContextValid()) {
@@ -781,75 +791,12 @@ async function expandAllSections(): Promise<void> {
 
 
 /**
- * Extract profile data from the current LinkedIn page
- * Strategy: Use SSR (embedded JSON) for core profile data,
- * DOM scraping for fields SSR doesn't include (skills, activities, etc.)
+ * Extract profile data from the current LinkedIn page using DOM scraping
  */
 async function extractProfileData(profileId: string, startTime: number): Promise<Partial<StoredProfile>> {
-  logger.debug('Starting extraction...');
-  updateProgress('expanding', startTime);
-
-  // Try to get embedded profile data (SSR) - contains employers, education
-  const embeddedData = await getEmbeddedProfileData();
-  if (embeddedData) {
-    logger.debug('Using embedded profile data (SSR)');
-    updateProgress('experience', startTime);
-
-    // SSR provides: name, headline, location, about, employers, education
-    // DOM provides: skills, activities, certifications, volunteering, recommendations, etc.
-    const profileData: Partial<StoredProfile> = {
-      name: embeddedData.name,
-      headline: embeddedData.headline,
-      location: embeddedData.location,
-      avatarUrl: embeddedData.avatarUrl,
-      about: embeddedData.about,
-      employers: embeddedData.employers,
-      education: embeddedData.education,
-      // DOM-only fields (SSR doesn't include these)
-      skills: extractSkills(),
-      certifications: extractCertifications(),
-      volunteering: extractVolunteering(),
-      honorsAwards: extractHonorsAwards(),
-      courses: extractCourses(),
-      languages: extractLanguages(),
-      activities: extractActivities(),
-      recommendations: extractRecommendations(),
-      publications: extractPublications(),
-      organizations: extractOrganizations(),
-      interests: extractInterests(),
-      testScores: extractTestScores(),
-      services: extractServices(),
-      lastSeen: new Date().toISOString(),
-    };
-
-    logger.debug('SSR + DOM extraction complete:', {
-      name: profileData.name,
-      headline: profileData.headline,
-      employers: profileData.employers?.length,
-      education: profileData.education?.length,
-      skills: profileData.skills?.length,
-      activities: profileData.activities?.length,
-      recommendations: profileData.recommendations?.length,
-    });
-
-    updateProgress('complete', startTime);
-    return profileData;
-  }
-
-  // Fall back to full DOM scraping if no SSR data available
-  logger.debug('No SSR data, falling back to full DOM scraping...');
-
-  // Debug: Comprehensive DOM inspection
-  try {
-    debugLinkedInDOM();
-  } catch (e) {
-    logger.debug('Debug DOM inspection error:', e);
-  }
-
-  logger.debug('Extracting profile fields from DOM...');
+  logger.debug('Starting DOM extraction...');
   updateProgress('experience', startTime);
 
-  // Extract all data from the main profile page only (no navigation)
   const profileData: Partial<StoredProfile> = {
     name: extractName(),
     headline: extractHeadline(),
@@ -871,6 +818,7 @@ async function extractProfileData(profileId: string, startTime: number): Promise
     interests: extractInterests(),
     testScores: extractTestScores(),
     services: extractServices(),
+    projects: extractProjects(),
     lastSeen: new Date().toISOString(),
   };
 
@@ -879,9 +827,6 @@ async function extractProfileData(profileId: string, startTime: number): Promise
     employers: profileData.employers?.length,
     education: profileData.education?.length,
     skills: profileData.skills?.length,
-    certifications: profileData.certifications?.length,
-    volunteering: profileData.volunteering?.length,
-    recommendations: profileData.recommendations?.length,
   });
 
   updateProgress('complete', startTime);
@@ -1103,37 +1048,50 @@ async function mergeProfileData(
   const now = new Date().toISOString();
   logger.debug('mergeProfileData called, storedData:', storedData ? 'exists' : 'null');
 
-  // Detect changes if we have stored data
+  // Detect changes only for profiles we've seen before (not brand new)
+  // If firstSeen is within the last minute, this is still the initial capture
   let historyUpdates: HistoryEntry[] = [];
-  if (storedData) {
+  const isEstablishedProfile = storedData?.firstSeen &&
+    (Date.now() - new Date(storedData.firstSeen).getTime() > 60000);
+
+  if (storedData && isEstablishedProfile) {
     const changes = detectChanges(storedData, newData);
     if (changes.length > 0) {
       logger.debug('Detected changes:', changes.map(c => c.field));
       const withHistory = recordHistory(storedData, changes, now);
       historyUpdates = withHistory.history || [];
 
-      // Sync new history entries to backend (fire and forget)
+      // Sync new history entries to backend (fire and forget) - only if consent given
       const profileId = extractProfileIdFromUrl(window.location.href);
       if (profileId) {
-        const newEntries: HistoryEntrySync[] = changes.map(change => ({
-          field: change.field,
-          oldValue: change.oldValue,
-          newValue: change.newValue,
-          detectedAt: now,
-        }));
-        syncHistory(profileId, newEntries).then(result => {
-          if (result.success) {
-            logger.debug('History synced to backend:', result.synced);
-          } else {
-            logger.debug('History sync failed:', result.error);
+        hasConsent().then(consented => {
+          if (!consented) {
+            logger.debug('Server sync skipped - no consent');
+            return;
           }
-        }).catch(err => {
-          logger.debug('History sync error:', err);
+          const newEntries: HistoryEntrySync[] = changes.map(change => ({
+            field: change.field,
+            oldValue: change.oldValue,
+            newValue: change.newValue,
+            detectedAt: now,
+          }));
+          syncHistory(profileId, newEntries).then(result => {
+            if (result.success) {
+              logger.debug('History synced to backend:', result.synced);
+            } else {
+              logger.debug('History sync failed:', result.error);
+            }
+          }).catch(err => {
+            logger.debug('History sync error:', err);
+          });
         });
       }
     } else {
       historyUpdates = storedData.history || [];
     }
+  } else if (storedData) {
+    // Same visit (lazy reload) - preserve existing history without detecting changes
+    historyUpdates = storedData.history || [];
   }
 
   // If we already have stored data with a VALID archetype AND real AI-derived intelligence, just update profile data
@@ -1183,12 +1141,24 @@ async function mergeProfileData(
     volunteering: newData.volunteering,
     certifications: newData.certifications,
     activities: newData.activities,
+    projects: newData.projects,
   };
 
   // Skip API calls when testing data extraction
   if (DISABLE_API_WRITES) {
     logger.debug('API writes disabled (DISABLE_API_WRITES=true). Using local heuristics.');
     logger.debug('Extracted profile data:', JSON.stringify(aiProfileData, null, 2));
+    const syncResult = mergeProfileDataSync(newData, storedData);
+    if (historyUpdates.length > 0) {
+      syncResult.history = historyUpdates;
+    }
+    return syncResult;
+  }
+
+  // Skip server sync if no consent - use local heuristics only
+  const consented = await hasConsent();
+  if (!consented) {
+    logger.debug('Server sync skipped - no consent. Using local heuristics.');
     const syncResult = mergeProfileDataSync(newData, storedData);
     if (historyUpdates.length > 0) {
       syncResult.history = historyUpdates;

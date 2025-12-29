@@ -23,13 +23,34 @@ export default function PrivacyPage() {
             </p>
           </section>
 
+          <section className="bg-amber-900/20 border border-amber-700/50 rounded-lg p-6 my-8">
+            <h2 className="text-2xl font-display mb-4 text-amber-400">⚠️ Important: Authenticated Proxy Notice</h2>
+            <p className="text-amber-200 leading-relaxed mb-4">
+              <strong>This extension acts as an AUTHENTICATED PROXY.</strong>
+            </p>
+            <p className="text-neutral-300 leading-relaxed mb-4">
+              When you use Social Recall, it captures LinkedIn profile data that is visible through
+              YOUR logged-in LinkedIn session. This includes connection-restricted information that
+              you can access because of your LinkedIn credentials and network connections.
+            </p>
+            <p className="text-neutral-300 leading-relaxed mb-4">
+              This data is transmitted to our servers for processing and storage. By using this
+              extension, you acknowledge that you are acting as a data collection proxy - allowing
+              us to collect LinkedIn data that we could not access otherwise.
+            </p>
+            <p className="text-neutral-400 text-sm">
+              Your consent to this data collection is logged with your IP address and timestamp
+              for compliance purposes. You can revoke consent at any time in the extension settings.
+            </p>
+          </section>
+
           <section>
             <h2 className="text-2xl font-display mb-4">Data We Collect</h2>
 
             <h3 className="text-xl font-semibold mt-6 mb-3">LinkedIn Profile Data</h3>
             <p className="text-neutral-300 leading-relaxed mb-4">
-              When you visit a LinkedIn profile page, the Extension extracts the following
-              publicly visible information:
+              When you visit a LinkedIn profile page, the Extension extracts information
+              visible to you through your authenticated LinkedIn session:
             </p>
             <ul className="list-disc list-inside text-neutral-300 space-y-1 ml-4">
               <li>Name and headline</li>
@@ -44,9 +65,25 @@ export default function PrivacyPage() {
               <li>Recent activity posts</li>
             </ul>
             <p className="text-neutral-400 mt-4 text-sm">
-              <strong>Important:</strong> We only collect information that is publicly visible on the
-              LinkedIn profile page you are viewing. We do not access private messages, connection
-              lists, or any data that requires LinkedIn login credentials.
+              <strong>Note:</strong> This includes profile information that may only be visible because
+              of your LinkedIn credentials and network connections. We do not access private messages
+              or your LinkedIn connection list.
+            </p>
+
+            <h3 className="text-xl font-semibold mt-6 mb-3">Consent Record</h3>
+            <p className="text-neutral-300 leading-relaxed mb-4">
+              When you grant consent to data collection, we record:
+            </p>
+            <ul className="list-disc list-inside text-neutral-300 space-y-1 ml-4">
+              <li>Timestamp of consent</li>
+              <li>Extension version and consent text version (hash)</li>
+              <li>Your IP address (for compliance verification)</li>
+              <li>Browser user agent</li>
+            </ul>
+            <p className="text-neutral-400 mt-4 text-sm">
+              This record is retained to demonstrate that valid consent was obtained, as required
+              by GDPR Article 7. If you request data deletion, your IP address will be anonymized
+              (last two octets redacted) while the minimal audit trail is preserved.
             </p>
 
             <h3 className="text-xl font-semibold mt-6 mb-3">Data You Provide</h3>
@@ -103,7 +140,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-2xl font-display mb-4">Third-Party Services</h2>
             <ul className="list-disc list-inside text-neutral-300 space-y-2 ml-4">
-              <li><strong>LinkedIn:</strong> We read publicly visible profile data. We do not access your LinkedIn account.</li>
+              <li><strong>LinkedIn:</strong> We read profile data visible to you via your authenticated session. We do not access your LinkedIn credentials.</li>
               <li><strong>Google Authentication:</strong> Used only for sign-in. We receive only basic profile info.</li>
               <li><strong>Vercel:</strong> Hosts our web application and processes AI analysis requests.</li>
               <li><strong>Supabase:</strong> Provides database and authentication services (US-based).</li>
@@ -114,9 +151,15 @@ export default function PrivacyPage() {
             <h2 className="text-2xl font-display mb-4">Your Rights</h2>
             <ul className="list-disc list-inside text-neutral-300 space-y-2 ml-4">
               <li><strong>Access:</strong> View all locally stored data via Chrome developer tools.</li>
-              <li><strong>Delete:</strong> Clear local data by uninstalling the Extension; delete cloud data via settings.</li>
-              <li><strong>Export:</strong> Download your contacts and notes in JSON format.</li>
+              <li><strong>Revoke Consent:</strong> Stop data collection at any time via extension settings. This stops future uploads but preserves your existing data.</li>
+              <li><strong>Delete:</strong> Request deletion of your personal data using the form below. This removes your notes, browsing history, and anonymizes your consent record.</li>
+              <li><strong>Export:</strong> Download your contacts and notes via extension settings.</li>
             </ul>
+            <p className="text-neutral-400 mt-4 text-sm">
+              <strong>Note on Profile Data:</strong> LinkedIn profile data you&apos;ve helped collect is aggregated
+              into our master database and may be retained even after you delete your personal data.
+              This aggregated data is not tied to your identity.
+            </p>
           </section>
 
           <section>
@@ -161,12 +204,46 @@ export default function PrivacyPage() {
               For users in the European Economic Area, we process your data based on:
             </p>
             <ul className="list-disc list-inside text-neutral-300 space-y-1 ml-4 mt-2">
-              <li><strong>Consent:</strong> You choose to install and use the Extension</li>
+              <li><strong>Consent:</strong> You explicitly consent to data collection via the in-extension consent dialog</li>
               <li><strong>Legitimate Interest:</strong> Providing the service you requested</li>
               <li><strong>Contract:</strong> If you create an account, fulfilling our service agreement</li>
             </ul>
             <p className="text-neutral-400 mt-4 text-sm">
-              You may withdraw consent at any time by uninstalling the Extension.
+              You may withdraw consent at any time via extension settings or by uninstalling the Extension.
+            </p>
+          </section>
+
+          <section className="mt-12 pt-8 border-t border-neutral-800" id="delete-my-data">
+            <h2 className="text-2xl font-display mb-4 text-red-400">Delete My Data</h2>
+            <p className="text-neutral-300 leading-relaxed mb-4">
+              To request deletion of your personal data, enter the email address associated
+              with your Social Recall account. This will delete:
+            </p>
+            <ul className="list-disc list-inside text-neutral-300 space-y-1 ml-4 mb-6">
+              <li>Your notes and browsing history</li>
+              <li>Your account and settings</li>
+              <li>Your consent record will be anonymized (last two IP octets redacted) but timestamp retained for audit</li>
+            </ul>
+            <p className="text-neutral-400 text-sm mb-4">
+              Note: LinkedIn profile data you helped collect is aggregated and will remain in
+              our master database, but will no longer be associated with your account.
+            </p>
+            <form className="flex gap-4 max-w-md">
+              <input
+                type="email"
+                placeholder="your@email.com"
+                className="flex-1 px-4 py-2 bg-neutral-900 border border-neutral-700 rounded-lg text-white placeholder:text-neutral-500 focus:outline-none focus:border-red-500"
+                required
+              />
+              <button
+                type="submit"
+                className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors"
+              >
+                Request Deletion
+              </button>
+            </form>
+            <p className="text-neutral-500 text-xs mt-4">
+              We will send a confirmation email before processing your request.
             </p>
           </section>
         </div>

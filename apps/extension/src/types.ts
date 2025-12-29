@@ -80,6 +80,7 @@ export interface ProfileData {
   volunteering?: Volunteering[];
   certifications?: Certification[];
   activities?: Activity[];
+  projects?: Project[];
   notes?: string;
 }
 

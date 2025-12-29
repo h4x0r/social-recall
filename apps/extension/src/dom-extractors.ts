@@ -3,7 +3,7 @@
  * Extracts profile information directly from the rendered DOM
  */
 
-import type { Employer, Education, Volunteering, Certification, Activity } from './types';
+import type { Employer, Education, Volunteering, Certification, Activity, Project } from './types';
 import { logger } from './logger';
 
 /**
@@ -275,64 +275,56 @@ function isValidCompanyName(name: string): boolean {
 }
 
 /**
- * Extract company name from an experience entry container
+ * Extract job title AND company name from an experience entry container
+ * Returns { title, company } or null
  */
-function extractCompanyNameFromExperience(container: Element): string | null {
-  // LinkedIn's experience entry structure (based on DOM analysis):
-  // 1. Company name (first substantial text, often NOT in bold)
-  // 2. Tenure duration (e.g., "17 yrs 1 mo")
-  // 3. Job title (often in bold)
-  // 4. Date range with duration (e.g., "Jul 2020 - Present · 5 yrs 6 mos")
+function extractExperienceFromContainer(container: Element): { title: string; company: string } | null {
+  // LinkedIn's experience entry structure:
+  // 1. Job title (first span, often in bold/mr-1 class)
+  // 2. Company name (second span, often with " · Full-time" suffix)
+  // 3. Date ranges, durations, locations (subsequent spans)
 
   const spans = container.querySelectorAll('span[aria-hidden="true"]');
+  const texts: string[] = [];
 
-  // Patterns to skip
-  const datePattern = /^\w{3} \d{4}|^\d{4}|Present|\d+\s*(yr|yrs|mo|mos|year|month)/i;
+  // Patterns to identify non-title/company text
+  const datePattern = /^\w{3} \d{4}|^\d{4}\s*-|Present|\d+\s*(yr|yrs|mo|mos|year|month)/i;
   const locationPattern = /^(Remote|Hybrid|On-site)$|,\s*(Remote|Hybrid|On-site)$/i;
-  const jobTitlePattern = /^(founder|co-founder|ceo|cto|cfo|coo|president|director|manager|lead|senior|junior|engineer|developer|analyst|consultant|specialist|coordinator|associate|intern|head of|vp|vice|chairman|co-chair|partner|advisor|member|board|investor|founding|executive|chief|general|principal|owner|creator|author|host|producer|coach|mentor|speaker|ambassador|evangelist|advocate)/i;
+  const employmentTypes = ['full-time', 'part-time', 'contract', 'freelance', 'self-employed', 'internship', 'apprenticeship', 'seasonal'];
 
-  // Look for company name patterns
   for (const span of spans) {
     const text = span.textContent?.trim();
     if (!text || text.length < 2 || text.length > 100) continue;
 
-    // Skip if it looks like a date or tenure
+    // Skip dates, durations, locations
     if (datePattern.test(text)) continue;
-    if (text.includes(' · ') && /\d+\s*(yr|mo)/i.test(text)) continue; // "Jul 2020 - Present · 5 yrs"
-
-    // Skip location
+    if (text.includes(' · ') && /\d+\s*(yr|mo)/i.test(text)) continue;
     if (locationPattern.test(text)) continue;
-
-    // Skip job titles
-    if (jobTitlePattern.test(text)) continue;
-
-    // Skip generic text
     if (text === 'Experience' || text === 'Skills' || text.includes('endorsement')) continue;
 
-    // Skip description text (usually longer)
-    if (text.length > 80) continue;
+    texts.push(text);
+  }
 
-    // Company name with employment type: "NEVERHACK Estonia · Full-time"
-    if (text.includes(' · ')) {
-      const parts = text.split(' · ');
-      const employmentTypes = ['full-time', 'part-time', 'contract', 'freelance', 'self-employed', 'internship', 'apprenticeship', 'seasonal'];
-      const secondPart = parts[1]?.toLowerCase() || '';
-      if (employmentTypes.some(type => secondPart.includes(type))) {
-        const company = parts[0].trim();
-        if (company.length > 2 && company.length < 80) {
-          return company;
-        }
-      }
-    }
+  if (texts.length < 2) return null;
 
-    // Standalone company name - check if it's likely a company
-    // Companies often: have capital letters, are 2-5 words, don't start with job title words
-    const words = text.split(/\s+/);
-    if (words.length >= 1 && words.length <= 8) {
-      // If we've reached here, this is likely a company name
-      // (it's not a date, location, or job title)
-      return text;
+  // First text is typically the job title
+  const title = texts[0];
+
+  // Second text is typically company (may have " · Full-time" suffix)
+  let company = texts[1];
+
+  // Clean up company name - remove employment type suffix
+  if (company.includes(' · ')) {
+    const parts = company.split(' · ');
+    const suffix = parts[1]?.toLowerCase() || '';
+    if (employmentTypes.some(type => suffix.includes(type))) {
+      company = parts[0].trim();
     }
+  }
+
+  // Validate we have both
+  if (title && company && title.length > 1 && company.length > 1) {
+    return { title, company };
   }
 
   return null;
@@ -473,19 +465,20 @@ export function extractEmployers(): Employer[] {
     const nestedImgs = div.querySelectorAll('img[src*="company-logo"], img[src*="shrink_100"]');
     if (nestedImgs.length > 1) continue; // Skip parent containers
 
-    // Extract company name from this specific experience entry
-    const companyName = extractCompanyNameFromExperience(div);
-    if (companyName && !seen.has(companyName.toLowerCase())) {
-      seen.add(companyName.toLowerCase());
+    // Extract both title and company from this experience entry
+    const experience = extractExperienceFromContainer(div);
+    if (experience && !seen.has(experience.company.toLowerCase())) {
+      seen.add(experience.company.toLowerCase());
       employers.push({
-        company: companyName,
+        company: experience.company,
+        title: experience.title,
         logo: img.src || '',
       });
-      logger.debug(`Found employer: ${companyName}`);
+      logger.debug(`Found employer: ${experience.title} at ${experience.company}`);
     }
   }
 
-  logger.debug('Extracted employers:', employers.length, employers.map(e => e.company));
+  logger.debug('Extracted employers:', employers.length, employers.map(e => `${e.title} @ ${e.company}`));
   return employers;
 }
 
@@ -499,7 +492,13 @@ export function extractAbout(): string | undefined {
   const textEl = aboutSection.querySelector('.pv-shared-text-with-see-more span[aria-hidden="true"]') ||
     aboutSection.querySelector('[class*="inline-show-more-text"] span[aria-hidden="true"]') ||
     aboutSection.querySelector('span[aria-hidden="true"]');
-  return textEl?.textContent?.trim();
+  const text = textEl?.textContent?.trim();
+
+  // About text should be a meaningful description (at least 20 chars)
+  // Filter out connection degree indicators like "2nd", "3rd", etc.
+  if (!text || text.length < 20) return undefined;
+
+  return text;
 }
 
 /**
@@ -1101,4 +1100,65 @@ export function extractServices(): string[] {
 
   logger.debug(`Extracted ${services.length} services`);
   return services;
+}
+
+/**
+ * Extract projects from the profile
+ */
+export function extractProjects(): Project[] {
+  const projects: Project[] = [];
+
+  const section = findSectionByHeader('Projects');
+  if (!section) {
+    logger.debug('Projects section not found');
+    return projects;
+  }
+
+  logger.debug('Found Projects section');
+  const seen = new Set<string>();
+
+  // Find project entries (divs with project info)
+  const allDivs = section.querySelectorAll('div');
+
+  for (const div of allDivs) {
+    const spans = div.querySelectorAll('span[aria-hidden="true"]');
+    if (spans.length < 1) continue;
+
+    // Skip nested containers
+    const nestedDivs = div.querySelectorAll('div');
+    if (nestedDivs.length > 10) continue;
+
+    let name = '';
+    let description = '';
+
+    for (const span of spans) {
+      const text = span.textContent?.trim();
+      if (!text || text.length < 2) continue;
+
+      // Skip common non-project text
+      if (/^\w{3} \d{4}|Present|\d+\s*(yr|mo)/i.test(text)) continue;
+      if (text.includes('Show all') || text === 'Projects') continue;
+
+      // First substantial text is likely the project name
+      if (!name && text.length > 2 && text.length < 100) {
+        name = text;
+        continue;
+      }
+
+      // Second text might be description
+      if (name && !description && text.length > 10 && text.length < 500) {
+        description = text;
+        break;
+      }
+    }
+
+    if (name && !seen.has(name.toLowerCase())) {
+      seen.add(name.toLowerCase());
+      projects.push({ name, description: description || undefined });
+      logger.debug(`Found project: ${name}`);
+    }
+  }
+
+  logger.debug(`Extracted ${projects.length} projects`);
+  return projects;
 }
