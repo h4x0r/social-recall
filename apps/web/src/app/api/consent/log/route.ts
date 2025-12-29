@@ -8,7 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import type { Database } from '@/lib/database.types';
+import type { Database, DbConsentLogInsert } from '@/lib/database.types';
 import { getCorsHeaders } from '@/lib/cors';
 
 // Handle CORS preflight
@@ -58,13 +58,19 @@ export async function POST(request: NextRequest) {
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
     const adminClient = createClient<Database>(supabaseUrl, supabaseServiceKey);
 
-    const { data, error } = await adminClient.from('consent_logs').insert({
+    const insertData: DbConsentLogInsert = {
       user_id: user.id,
       extension_version: extensionVersion,
       consent_text_version: consentTextVersion,
       user_agent: userAgent,
       given: true,
-    }).select('id').single();
+    };
+
+    const { data, error } = await adminClient
+      .from('consent_logs')
+      .insert(insertData as never)
+      .select('id')
+      .single();
 
     if (error) {
       console.error('Failed to log consent:', error);
@@ -75,7 +81,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { success: true, consentId: data.id },
+      { success: true, consentId: (data as { id: string }).id },
       { status: 200, headers: corsHeaders }
     );
   } catch (error) {

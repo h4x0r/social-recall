@@ -65,11 +65,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const consentData = data as { id: string; created_at: string };
     return NextResponse.json(
       {
         hasConsent: true,
-        consentId: data.id,
-        consentedAt: data.created_at,
+        consentId: consentData.id,
+        consentedAt: consentData.created_at,
       },
       { status: 200, headers: corsHeaders }
     );

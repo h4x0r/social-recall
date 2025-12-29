@@ -476,26 +476,23 @@ export interface DbConsentLog {
   extension_version: string;
   consent_text_version: string;
   user_agent: string;
-  ip_address: string;
   given: boolean;
   revoked_at: string | null;
-  user_id: string | null;
+  user_id: string;
   created_at: string;
 }
 
 export interface DbConsentLogInsert {
+  user_id: string;
   extension_version: string;
   consent_text_version: string;
   user_agent: string;
-  ip_address: string;
   given?: boolean;
-  user_id?: string | null;
 }
 
 export interface DbConsentLogUpdate {
   given?: boolean;
   revoked_at?: string | null;
-  ip_address?: string; // For anonymization on data deletion
 }
 
 // Deletion requests for GDPR compliance

@@ -31,7 +31,7 @@ export async function logConsent(params: LogConsentParams): Promise<ActionResult
     consent_text_version: params.consentTextVersion,
     user_agent: params.userAgent,
     given: true,
-  });
+  } as never);
 
   if (error) {
     return { success: false, error: error.message };
@@ -48,7 +48,7 @@ export async function revokeConsent(userId: string): Promise<ActionResult> {
 
   const { error } = await supabase
     .from('consent_logs')
-    .update({ revoked_at: new Date().toISOString() })
+    .update({ revoked_at: new Date().toISOString() } as never)
     .eq('user_id', userId);
 
   if (error) {
