@@ -12,6 +12,18 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholde
 // Create typed Supabase client
 export const supabase: SupabaseClient<Database> = createClient<Database>(supabaseUrl, supabaseAnonKey);
 
+/**
+ * Create a Supabase admin client with service role key
+ * Use for server-side operations that need elevated permissions
+ */
+export function createAdminClient(): SupabaseClient<Database> {
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceRoleKey) {
+    throw new Error('SUPABASE_SERVICE_ROLE_KEY is required');
+  }
+  return createClient<Database>(supabaseUrl, serviceRoleKey);
+}
+
 // Re-export repository factories for dependency injection
 export { createContactRepository } from './contact-repository';
 export type { ContactRepository } from './contact-repository';

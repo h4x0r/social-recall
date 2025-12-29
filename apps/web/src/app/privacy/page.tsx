@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { DeletionForm } from "@/components/privacy/deletion-form";
 import { StatusBanner } from "@/components/privacy/status-banner";
+import { RevokeConsentButton } from "@/components/privacy/revoke-consent-button";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
@@ -45,8 +46,8 @@ export default function PrivacyPage() {
               us to collect LinkedIn data that we could not access otherwise.
             </p>
             <p className="text-neutral-400 text-sm">
-              Your consent to this data collection is logged with your IP address and timestamp
-              for compliance purposes. You can revoke consent at any time in the extension settings.
+              Your consent to this data collection is logged with your account and timestamp
+              for compliance purposes. You can revoke consent at any time below or in the extension settings.
             </p>
           </section>
 
@@ -82,14 +83,14 @@ export default function PrivacyPage() {
             </p>
             <ul className="list-disc list-inside text-neutral-300 space-y-1 ml-4">
               <li>Timestamp of consent</li>
+              <li>Your account ID (linked to your OAuth sign-in)</li>
               <li>Extension version and consent text version (hash)</li>
-              <li>Your IP address (for compliance verification)</li>
               <li>Browser user agent</li>
             </ul>
             <p className="text-neutral-400 mt-4 text-sm">
               This record is retained to demonstrate that valid consent was obtained, as required
-              by GDPR Article 7. If you request data deletion, your IP address will be anonymized
-              (last two octets redacted) while the minimal audit trail is preserved.
+              by GDPR Article 7. If you request data deletion, your consent record will be removed
+              along with your account.
             </p>
 
             <h3 className="text-xl font-semibold mt-6 mb-3">Data You Provide</h3>
@@ -219,16 +220,33 @@ export default function PrivacyPage() {
             </p>
           </section>
 
+          <section className="mt-12 pt-8 border-t border-neutral-800" id="revoke-consent">
+            <h2 className="text-2xl font-display mb-4 text-amber-400">Revoke Consent</h2>
+            <p className="text-neutral-300 leading-relaxed mb-4">
+              If you no longer want the extension to collect data on your behalf, you can revoke
+              your consent. This will:
+            </p>
+            <ul className="list-disc list-inside text-neutral-300 space-y-1 ml-4 mb-6">
+              <li>Stop all future data collection</li>
+              <li>Keep your existing data (contacts, notes) intact</li>
+              <li>Allow you to continue using the web app</li>
+            </ul>
+            <p className="text-neutral-400 text-sm mb-4">
+              You can re-grant consent later by signing in again through the extension.
+            </p>
+            <RevokeConsentButton />
+          </section>
+
           <section className="mt-12 pt-8 border-t border-neutral-800" id="delete-my-data">
             <h2 className="text-2xl font-display mb-4 text-red-400">Delete My Data</h2>
             <p className="text-neutral-300 leading-relaxed mb-4">
-              To request deletion of your personal data, enter the email address associated
-              with your Social Recall account. This will delete:
+              To request complete deletion of your personal data, enter the email address associated
+              with your Social Recall account. This will permanently delete:
             </p>
             <ul className="list-disc list-inside text-neutral-300 space-y-1 ml-4 mb-6">
               <li>Your notes and browsing history</li>
               <li>Your account and settings</li>
-              <li>Your consent record will be anonymized (last two IP octets redacted) but timestamp retained for audit</li>
+              <li>Your consent record</li>
             </ul>
             <p className="text-neutral-400 text-sm mb-4">
               Note: LinkedIn profile data you helped collect is aggregated and will remain in

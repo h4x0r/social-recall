@@ -32,16 +32,25 @@ const mockChrome = {
   runtime: {
     id: 'test-extension-id',
   },
+  tabs: {
+    create: vi.fn(),
+  },
 };
 
 vi.stubGlobal('chrome', mockChrome);
 
+// Mock fetch
+const mockFetch = vi.fn();
+vi.stubGlobal('fetch', mockFetch);
+
 // Import after mocking
 import {
   getConsent,
-  setConsent,
-  revokeConsent,
-  hasConsent,
+  hasLocalConsent,
+  checkServerConsent,
+  grantConsent,
+  clearLocalConsent,
+  openPrivacyPage,
   getConsentTextHash,
   CONSENT_TEXT,
   type ConsentRecord,
@@ -66,9 +75,7 @@ describe('Consent Storage Module', () => {
         timestamp: '2025-12-29T14:32:00.000Z',
         extensionVersion: '0.0.7',
         consentTextVersion: 'abc123',
-        userAgent: 'Mozilla/5.0',
-        ip: '192.168.1.1',
-        serverLogId: 'uuid-123',
+        consentId: 'consent-uuid-123',
       };
       mockStorage.consent = consentRecord;
 
@@ -77,62 +84,9 @@ describe('Consent Storage Module', () => {
     });
   });
 
-  describe('setConsent', () => {
-    it('stores consent record with all required fields', async () => {
-      const serverResponse = {
-        ip: '192.168.1.1',
-        logId: 'uuid-123',
-      };
-
-      await setConsent(serverResponse);
-
-      expect(mockChrome.storage.local.set).toHaveBeenCalled();
-      const storedConsent = mockStorage.consent as ConsentRecord;
-
-      expect(storedConsent.given).toBe(true);
-      expect(storedConsent.timestamp).toBeDefined();
-      expect(storedConsent.extensionVersion).toBeDefined();
-      expect(storedConsent.consentTextVersion).toBeDefined();
-      expect(storedConsent.userAgent).toBeDefined();
-      expect(storedConsent.ip).toBe('192.168.1.1');
-      expect(storedConsent.serverLogId).toBe('uuid-123');
-    });
-
-    it('generates consent text version hash', async () => {
-      await setConsent({ ip: '1.2.3.4', logId: 'test' });
-
-      const storedConsent = mockStorage.consent as ConsentRecord;
-      expect(storedConsent.consentTextVersion).toBeTruthy();
-      expect(typeof storedConsent.consentTextVersion).toBe('string');
-    });
-  });
-
-  describe('revokeConsent', () => {
-    it('sets given to false but preserves record', async () => {
-      mockStorage.consent = {
-        given: true,
-        timestamp: '2025-12-29T14:32:00.000Z',
-        extensionVersion: '0.0.7',
-        consentTextVersion: 'abc123',
-        userAgent: 'Mozilla/5.0',
-        ip: '192.168.1.1',
-        serverLogId: 'uuid-123',
-      };
-
-      await revokeConsent();
-
-      const storedConsent = mockStorage.consent as ConsentRecord;
-      expect(storedConsent.given).toBe(false);
-      expect(storedConsent.revokedAt).toBeDefined();
-      // Original fields preserved
-      expect(storedConsent.timestamp).toBe('2025-12-29T14:32:00.000Z');
-      expect(storedConsent.serverLogId).toBe('uuid-123');
-    });
-  });
-
-  describe('hasConsent', () => {
+  describe('hasLocalConsent', () => {
     it('returns false when no consent exists', async () => {
-      const result = await hasConsent();
+      const result = await hasLocalConsent();
       expect(result).toBe(false);
     });
 
@@ -140,10 +94,11 @@ describe('Consent Storage Module', () => {
       mockStorage.consent = {
         given: false,
         timestamp: '2025-12-29T14:32:00.000Z',
+        consentId: 'test',
         revokedAt: '2025-12-30T10:00:00.000Z',
       };
 
-      const result = await hasConsent();
+      const result = await hasLocalConsent();
       expect(result).toBe(false);
     });
 
@@ -151,10 +106,117 @@ describe('Consent Storage Module', () => {
       mockStorage.consent = {
         given: true,
         timestamp: '2025-12-29T14:32:00.000Z',
+        consentId: 'test',
       };
 
-      const result = await hasConsent();
+      const result = await hasLocalConsent();
       expect(result).toBe(true);
+    });
+  });
+
+  describe('checkServerConsent', () => {
+    it('returns true when server says user has consent', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ hasConsent: true, consentId: 'uuid-123' }),
+      });
+
+      const result = await checkServerConsent('https://api.example.com', 'auth-token');
+
+      expect(result).toBe(true);
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.example.com/api/consent/status',
+        expect.objectContaining({
+          headers: { Authorization: 'Bearer auth-token' },
+        })
+      );
+    });
+
+    it('returns false when server says user has no consent', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ hasConsent: false }),
+      });
+
+      const result = await checkServerConsent('https://api.example.com', 'auth-token');
+      expect(result).toBe(false);
+    });
+
+    it('returns false on network error', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('Network error'));
+
+      const result = await checkServerConsent('https://api.example.com', 'auth-token');
+      expect(result).toBe(false);
+    });
+  });
+
+  describe('grantConsent', () => {
+    it('logs consent to server and stores locally on success', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ success: true, consentId: 'consent-uuid-123' }),
+      });
+
+      const result = await grantConsent('https://api.example.com', 'auth-token');
+
+      expect(result.success).toBe(true);
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.example.com/api/consent/log',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            Authorization: 'Bearer auth-token',
+          }),
+        })
+      );
+
+      const storedConsent = mockStorage.consent as ConsentRecord;
+      expect(storedConsent.given).toBe(true);
+      expect(storedConsent.consentId).toBe('consent-uuid-123');
+    });
+
+    it('returns error on server failure', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({ error: 'Server error' }),
+      });
+
+      const result = await grantConsent('https://api.example.com', 'auth-token');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Server error');
+      expect(mockStorage.consent).toBeUndefined();
+    });
+  });
+
+  describe('clearLocalConsent', () => {
+    it('sets given to false and adds revokedAt', async () => {
+      mockStorage.consent = {
+        given: true,
+        timestamp: '2025-12-29T14:32:00.000Z',
+        extensionVersion: '0.0.7',
+        consentTextVersion: 'abc123',
+        consentId: 'consent-uuid-123',
+      };
+
+      await clearLocalConsent();
+
+      const storedConsent = mockStorage.consent as ConsentRecord;
+      expect(storedConsent.given).toBe(false);
+      expect(storedConsent.revokedAt).toBeDefined();
+      // Original fields preserved
+      expect(storedConsent.timestamp).toBe('2025-12-29T14:32:00.000Z');
+      expect(storedConsent.consentId).toBe('consent-uuid-123');
+    });
+  });
+
+  describe('openPrivacyPage', () => {
+    it('opens privacy page with revoke-consent anchor', () => {
+      openPrivacyPage('https://www.socialrecall.now');
+
+      expect(mockChrome.tabs.create).toHaveBeenCalledWith({
+        url: 'https://www.socialrecall.now/privacy#revoke-consent',
+      });
     });
   });
 
