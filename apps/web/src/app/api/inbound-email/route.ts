@@ -119,14 +119,11 @@ export async function POST(request: NextRequest) {
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
     const supabase = createClient<Database>(supabaseUrl, supabaseServiceKey);
 
-    // Check if user exists with this email
-    const { data: users } = await supabase
-      .from('users')
-      .select('id')
-      .eq('email', senderEmail)
-      .limit(1);
+    // Check if user exists with this email (in Supabase auth schema)
+    const { data: authData } = await supabase.auth.admin.listUsers();
+    const matchedUsers = authData?.users?.filter(u => u.email?.toLowerCase() === senderEmail) || [];
 
-    if (!users || users.length === 0) {
+    if (matchedUsers.length === 0) {
       // No user found - still respond success to prevent email enumeration
       console.log(`No user found for ${senderEmail}`);
       return NextResponse.json({
@@ -135,7 +132,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const user = users[0] as { id: string };
+    const user = matchedUsers[0];
 
     // Generate deletion token
     const token = crypto.randomBytes(32).toString('hex');

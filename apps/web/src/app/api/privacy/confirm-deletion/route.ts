@@ -78,8 +78,12 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 4. Delete user account
-    await supabase.from('users').delete().eq('id', userId);
+    // 4. Delete user account from Supabase Auth
+    const { error: deleteUserError } = await supabase.auth.admin.deleteUser(userId);
+    if (deleteUserError) {
+      console.error('Failed to delete user from auth:', deleteUserError);
+      // Continue anyway - data is already deleted
+    }
 
     // 5. Mark deletion request as completed
     await supabase

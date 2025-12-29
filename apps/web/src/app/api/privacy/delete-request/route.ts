@@ -37,12 +37,9 @@ export async function POST(request: NextRequest) {
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
     const supabase = createClient<Database>(supabaseUrl, supabaseServiceKey);
 
-    // Check if user exists with this email
-    const { data: users, error: userError } = await supabase
-      .from('users')
-      .select('id, email')
-      .eq('email', email.toLowerCase())
-      .limit(1);
+    // Check if user exists with this email (in Supabase auth schema)
+    const { data: authData, error: userError } = await supabase.auth.admin.listUsers();
+    const users = authData?.users?.filter(u => u.email?.toLowerCase() === email.toLowerCase()) || [];
 
     if (userError) {
       console.error('Error checking user:', userError);
