@@ -14,14 +14,18 @@ vi.mock('next/navigation', () => ({
 // Mock useOpportunities
 const mockDismiss = vi.fn();
 const mockRefresh = vi.fn();
+const mockSnooze = vi.fn();
 
 vi.mock('@/hooks/use-opportunities', () => ({
   useOpportunities: vi.fn(() => ({
     opportunities: [],
     isLoading: false,
     error: null,
+    totalCount: 0,
+    countByType: { new_company: 0, role_change: 0, left_job: 0 },
     refresh: mockRefresh,
     dismiss: mockDismiss,
+    snooze: mockSnooze,
   })),
 }));
 
@@ -43,8 +47,11 @@ describe('OpportunityFeed', () => {
       opportunities: [],
       isLoading: true,
       error: null,
+      totalCount: 0,
+      countByType: { new_company: 0, role_change: 0, left_job: 0 },
       refresh: mockRefresh,
       dismiss: mockDismiss,
+      snooze: mockSnooze,
     });
 
     render(<OpportunityFeed />);
@@ -57,8 +64,11 @@ describe('OpportunityFeed', () => {
       opportunities: [],
       isLoading: false,
       error: 'Failed to load',
+      totalCount: 0,
+      countByType: { new_company: 0, role_change: 0, left_job: 0 },
       refresh: mockRefresh,
       dismiss: mockDismiss,
+      snooze: mockSnooze,
     });
 
     render(<OpportunityFeed />);
@@ -89,8 +99,11 @@ describe('OpportunityFeed', () => {
       ],
       isLoading: false,
       error: null,
+      totalCount: 1,
+      countByType: { new_company: 1, role_change: 0, left_job: 0 },
       refresh: mockRefresh,
       dismiss: mockDismiss,
+      snooze: mockSnooze,
     });
 
     render(<OpportunityFeed />);
@@ -119,8 +132,11 @@ describe('OpportunityFeed', () => {
       ],
       isLoading: false,
       error: null,
+      totalCount: 1,
+      countByType: { new_company: 0, role_change: 1, left_job: 0 },
       refresh: mockRefresh,
       dismiss: mockDismiss,
+      snooze: mockSnooze,
     });
 
     render(<OpportunityFeed />);
@@ -150,8 +166,11 @@ describe('OpportunityFeed', () => {
       ],
       isLoading: false,
       error: null,
+      totalCount: 1,
+      countByType: { new_company: 0, role_change: 0, left_job: 1 },
       refresh: mockRefresh,
       dismiss: mockDismiss,
+      snooze: mockSnooze,
     });
 
     render(<OpportunityFeed />);

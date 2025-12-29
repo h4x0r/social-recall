@@ -142,9 +142,9 @@ describe('google-contacts', () => {
       const result = await service.fetchContacts(mockToken);
 
       expect(result.contacts[0].employers).toHaveLength(3);
-      expect(result.contacts[0].employers[0].company).toBe('Current Corp');
-      expect(result.contacts[0].employers[0].isCurrent).toBe(true);
-      expect(result.contacts[0].employers[1].company).toBe('Previous Inc');
+      expect(result.contacts[0].employers![0].company).toBe('Current Corp');
+      expect(result.contacts[0].employers![0].isCurrent).toBe(true);
+      expect(result.contacts[0].employers![1].company).toBe('Previous Inc');
     });
 
     it('extracts LinkedIn profile URL if present', async () => {

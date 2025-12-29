@@ -20,10 +20,10 @@ describe('AuthGuard', () => {
       isLoading: true,
       isAuthenticated: false,
       user: null,
-      signIn: vi.fn(),
       signInWithMagicLink: vi.fn(),
       signInWithGoogle: vi.fn(),
       signOut: vi.fn(),
+      getProviderToken: vi.fn(),
     });
 
     render(
@@ -41,10 +41,10 @@ describe('AuthGuard', () => {
       isLoading: false,
       isAuthenticated: false,
       user: null,
-      signIn: vi.fn(),
       signInWithMagicLink: vi.fn(),
       signInWithGoogle: vi.fn(),
       signOut: vi.fn(),
+      getProviderToken: vi.fn(),
     });
 
     render(
@@ -61,11 +61,11 @@ describe('AuthGuard', () => {
     vi.mocked(useAuth).mockReturnValue({
       isLoading: false,
       isAuthenticated: true,
-      user: { id: 'user-1', email: 'test@example.com' },
-      signIn: vi.fn(),
+      user: { id: 'user-1', email: 'test@example.com', name: 'Test User', avatarUrl: null, createdAt: '2024-01-01T00:00:00Z' },
       signInWithMagicLink: vi.fn(),
       signInWithGoogle: vi.fn(),
       signOut: vi.fn(),
+      getProviderToken: vi.fn(),
     });
 
     render(
@@ -83,10 +83,10 @@ describe('AuthGuard', () => {
       isLoading: true,
       isAuthenticated: false,
       user: null,
-      signIn: vi.fn(),
       signInWithMagicLink: vi.fn(),
       signInWithGoogle: vi.fn(),
       signOut: vi.fn(),
+      getProviderToken: vi.fn(),
     });
 
     render(

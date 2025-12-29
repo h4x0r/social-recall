@@ -236,8 +236,11 @@ describe('/api/contacts/import-google', () => {
     // Mock the calculateMatchScore to return a high score
     const { calculateMatchScore } = await import('@/lib/contact-matcher');
     vi.mocked(calculateMatchScore).mockReturnValue({
+      linkedInContact: { id: 'li-1', linkedinId: 'johndoe', name: 'John Doe', employers: [] },
+      googleContact: { resourceName: 'people/123', name: 'John Doe', email: 'john@example.com' },
       score: 85,
-      signals: { nameScore: 35, employerMatch: true },
+      confidence: 'high',
+      signals: { nameScore: 35, employerMatch: true, linkedinUrl: false, locationMatch: false },
     });
 
     const mockClient = {

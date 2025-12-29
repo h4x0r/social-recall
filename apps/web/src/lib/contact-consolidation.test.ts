@@ -307,7 +307,7 @@ describe('contact-consolidation', () => {
       const google: GoogleContact = {
         resourceName: 'people/1',
         name: 'J. Doe',
-        email: null,
+        email: undefined,
         linkedinUrl: null,
         organization: null,
       };

@@ -3,25 +3,23 @@
  * Ensures proper origin restrictions in production
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { getCorsHeaders, EXTENSION_ORIGINS } from './cors';
 
 describe('CORS Configuration', () => {
-  const originalEnv = process.env.NODE_ENV;
-
   afterEach(() => {
-    process.env.NODE_ENV = originalEnv;
+    vi.unstubAllEnvs();
   });
 
   describe('getCorsHeaders', () => {
     it('returns wildcard in development', () => {
-      process.env.NODE_ENV = 'development';
+      vi.stubEnv('NODE_ENV', 'development');
       const headers = getCorsHeaders();
       expect(headers['Access-Control-Allow-Origin']).toBe('*');
     });
 
     it('returns extension origins in production', () => {
-      process.env.NODE_ENV = 'production';
+      vi.stubEnv('NODE_ENV', 'production');
       const headers = getCorsHeaders();
       // Should be specific extension ID, not wildcard
       expect(headers['Access-Control-Allow-Origin']).not.toBe('*');
