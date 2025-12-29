@@ -25,15 +25,16 @@ describe('RevokeConsentButton', () => {
     vi.clearAllMocks();
   });
 
-  it('shows nothing when user is not logged in', () => {
+  it('shows sign-in prompt when user is not logged in', () => {
     mockUseAuth.mockReturnValue({
       user: null,
       isLoading: false,
       isAuthenticated: false,
     });
 
-    const { container } = render(<RevokeConsentButton />);
-    expect(container).toBeEmptyDOMElement();
+    render(<RevokeConsentButton />);
+    expect(screen.getByText(/sign in to revoke/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /sign in/i })).toHaveAttribute('href', '/auth/signin');
   });
 
   it('shows loading state while checking auth', () => {

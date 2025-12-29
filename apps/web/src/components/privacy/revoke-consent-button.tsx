@@ -14,7 +14,17 @@ export function RevokeConsentButton() {
   }
 
   if (!isAuthenticated || !user) {
-    return null;
+    return (
+      <div className="bg-neutral-800/50 border border-neutral-700 rounded-lg p-4">
+        <p className="text-neutral-400 mb-3">Sign in to revoke your consent.</p>
+        <a
+          href="/auth/signin"
+          className="inline-block px-6 py-3 bg-amber-600 hover:bg-amber-500 text-white font-medium rounded-lg transition-colors"
+        >
+          Sign In
+        </a>
+      </div>
+    );
   }
 
   if (status === 'success') {
