@@ -1,4 +1,7 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
+import { DeletionForm } from "@/components/privacy/deletion-form";
+import { StatusBanner } from "@/components/privacy/status-banner";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
@@ -9,6 +12,9 @@ export default function PrivacyPage() {
   return (
     <main className="min-h-screen bg-[#0A0A0A] text-white">
       <div className="max-w-3xl mx-auto px-6 py-16">
+        <Suspense fallback={null}>
+          <StatusBanner />
+        </Suspense>
         <h1 className="font-display text-4xl mb-2">Privacy Policy</h1>
         <p className="text-neutral-400 mb-12">Last Updated: December 26, 2025</p>
 
@@ -228,23 +234,7 @@ export default function PrivacyPage() {
               Note: LinkedIn profile data you helped collect is aggregated and will remain in
               our master database, but will no longer be associated with your account.
             </p>
-            <form className="flex gap-4 max-w-md">
-              <input
-                type="email"
-                placeholder="your@email.com"
-                className="flex-1 px-4 py-2 bg-neutral-900 border border-neutral-700 rounded-lg text-white placeholder:text-neutral-500 focus:outline-none focus:border-red-500"
-                required
-              />
-              <button
-                type="submit"
-                className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors"
-              >
-                Request Deletion
-              </button>
-            </form>
-            <p className="text-neutral-500 text-xs mt-4">
-              We will send a confirmation email before processing your request.
-            </p>
+            <DeletionForm />
           </section>
         </div>
 

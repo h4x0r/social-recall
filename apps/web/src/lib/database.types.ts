@@ -498,6 +498,28 @@ export interface DbConsentLogUpdate {
   ip_address?: string; // For anonymization on data deletion
 }
 
+// Deletion requests for GDPR compliance
+export interface DbDeletionRequest {
+  id: string;
+  user_id: string;
+  email: string;
+  token: string;
+  expires_at: string;
+  completed_at: string | null;
+  created_at: string;
+}
+
+export interface DbDeletionRequestInsert {
+  user_id: string;
+  email: string;
+  token: string;
+  expires_at: string;
+}
+
+export interface DbDeletionRequestUpdate {
+  completed_at?: string;
+}
+
 // Database type definition for Supabase client
 export interface Database {
   public: {
@@ -601,6 +623,13 @@ export interface Database {
         Row: DbConsentLog;
         Insert: DbConsentLogInsert;
         Update: DbConsentLogUpdate;
+      };
+
+      // Deletion requests for GDPR compliance
+      deletion_requests: {
+        Row: DbDeletionRequest;
+        Insert: DbDeletionRequestInsert;
+        Update: DbDeletionRequestUpdate;
       };
     };
   };

@@ -140,6 +140,23 @@ body {
   border-color: rgba(239, 68, 68, 0.3);
 }
 
+.settings__row--warning {
+  border-color: var(--sr-gold);
+}
+
+.settings__row--warning:hover {
+  background: rgba(201, 162, 39, 0.1);
+}
+
+.settings__row--warning .settings__row-title {
+  color: var(--sr-gold);
+}
+
+.settings__row--warning .settings__row-icon {
+  color: var(--sr-gold);
+  border-color: rgba(201, 162, 39, 0.5);
+}
+
 /* Row Icon */
 .settings__row-icon {
   width: 40px;
@@ -164,6 +181,10 @@ body {
 
 .settings__row-icon--privacy {
   color: var(--sr-gold);
+}
+
+.settings__row-icon--revoke {
+  color: var(--sr-text-muted);
 }
 
 /* Row Content */

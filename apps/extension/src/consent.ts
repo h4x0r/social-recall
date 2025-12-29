@@ -92,10 +92,23 @@ export async function setConsent(serverResponse: ConsentServerResponse): Promise
 /**
  * Revoke consent - stops future server sync but preserves record for audit
  */
-export async function revokeConsent(): Promise<void> {
+export async function revokeConsent(apiUrl: string): Promise<void> {
   try {
     const existing = await getConsent();
     if (existing) {
+      // Notify server of revocation
+      try {
+        await fetch(`${apiUrl}/api/privacy/revoke-consent`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ consentLogId: existing.serverLogId }),
+        });
+      } catch (serverError) {
+        // Log but don't fail - local revocation is more important
+        logger.warn('Failed to notify server of revocation:', serverError);
+      }
+
+      // Update local record
       const revokedRecord: ConsentRecord = {
         ...existing,
         given: false,
