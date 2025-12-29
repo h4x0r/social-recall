@@ -9,15 +9,18 @@
  * 1. Add MX records for delete-my-data.socialrecall.now pointing to Resend
  * 2. Configure webhook URL in Resend Dashboard: https://www.socialrecall.now/api/inbound-email
  * 3. Select event type: email.received
+ * 4. Add RESEND_WEBHOOK_SECRET env var with signing secret from Resend dashboard
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { Webhook } from 'svix';
 import crypto from 'crypto';
 import type { Database } from '@/lib/database.types';
 import { sendDeletionConfirmationEmail } from '@/lib/email';
 
 const DELETE_DOMAIN = 'delete-my-data.socialrecall.now';
+const WEBHOOK_SECRET = process.env.RESEND_WEBHOOK_SECRET;
 
 interface InboundEmailPayload {
   type: 'email.received';
@@ -58,7 +61,36 @@ function isDeleteDomainEmail(recipients: string[]): boolean {
 
 export async function POST(request: NextRequest) {
   try {
-    const payload: InboundEmailPayload = await request.json();
+    // Get raw body for signature verification
+    const body = await request.text();
+
+    // Verify webhook signature
+    if (WEBHOOK_SECRET) {
+      const svixId = request.headers.get('svix-id');
+      const svixTimestamp = request.headers.get('svix-timestamp');
+      const svixSignature = request.headers.get('svix-signature');
+
+      if (!svixId || !svixTimestamp || !svixSignature) {
+        console.error('Missing svix headers');
+        return NextResponse.json({ error: 'Missing signature headers' }, { status: 401 });
+      }
+
+      const wh = new Webhook(WEBHOOK_SECRET);
+      try {
+        wh.verify(body, {
+          'svix-id': svixId,
+          'svix-timestamp': svixTimestamp,
+          'svix-signature': svixSignature,
+        });
+      } catch (err) {
+        console.error('Webhook signature verification failed:', err);
+        return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+      }
+    } else {
+      console.warn('RESEND_WEBHOOK_SECRET not set - skipping signature verification');
+    }
+
+    const payload: InboundEmailPayload = JSON.parse(body);
 
     // Verify this is an email.received event
     if (payload.type !== 'email.received') {
