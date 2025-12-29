@@ -69,7 +69,7 @@ import {
   inferGoodFor,
 } from './profile-merge';
 import { logger } from './logger';
-import { hasConsent, grantConsent, getConsent } from './consent';
+import { hasLocalConsent, grantConsent, getConsent } from './consent';
 
 
 // AI skills version - bump this to force re-inference for all cached profiles
@@ -331,7 +331,7 @@ function initialize(): void {
   });
 
   // Check consent status and show overlay if needed
-  hasConsent().then(consented => {
+  hasLocalConsent().then(consented => {
     if (!consented && panel) {
       logger.debug('No consent found, showing consent overlay');
       panel.showConsentOverlay();
@@ -1064,7 +1064,7 @@ async function mergeProfileData(
       // Sync new history entries to backend (fire and forget) - only if consent given
       const profileId = extractProfileIdFromUrl(window.location.href);
       if (profileId) {
-        hasConsent().then(consented => {
+        hasLocalConsent().then(consented => {
           if (!consented) {
             logger.debug('Server sync skipped - no consent');
             return;
@@ -1156,7 +1156,7 @@ async function mergeProfileData(
   }
 
   // Skip server sync if no consent - use local heuristics only
-  const consented = await hasConsent();
+  const consented = await hasLocalConsent();
   if (!consented) {
     logger.debug('Server sync skipped - no consent. Using local heuristics.');
     const syncResult = mergeProfileDataSync(newData, storedData);

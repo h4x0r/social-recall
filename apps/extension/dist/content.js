@@ -3544,15 +3544,42 @@ This data is transmitted to our servers. By proceeding, you acknowledge you are 
       return null;
     }
   }
-  async function setConsent(serverResponse) {
+  async function hasLocalConsent() {
+    const consent = await getConsent();
+    return (consent == null ? void 0 : consent.given) === true && !consent.revokedAt;
+  }
+  async function logConsentToServer(apiUrl, authToken) {
+    try {
+      const response = await fetch(`${apiUrl}/api/consent/log`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${authToken}`
+        },
+        body: JSON.stringify({
+          extensionVersion: EXTENSION_VERSION,
+          consentTextVersion: getConsentTextHash(),
+          userAgent: navigator.userAgent
+        })
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        return { success: false, error: errorData.error || `HTTP ${response.status}` };
+      }
+      const data = await response.json();
+      return { success: true, consentId: data.consentId };
+    } catch (error) {
+      logger.error("Failed to log consent to server:", error);
+      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+    }
+  }
+  async function storeLocalConsent(consentId) {
     const consentRecord = {
       given: true,
       timestamp: (/* @__PURE__ */ new Date()).toISOString(),
       extensionVersion: EXTENSION_VERSION,
       consentTextVersion: getConsentTextHash(),
-      userAgent: navigator.userAgent,
-      ip: serverResponse.ip,
-      serverLogId: serverResponse.logId
+      consentId
     };
     try {
       await chrome.storage.local.set({ consent: consentRecord });
@@ -3562,30 +3589,13 @@ This data is transmitted to our servers. By proceeding, you acknowledge you are 
       throw error;
     }
   }
-  async function hasConsent() {
-    const consent = await getConsent();
-    return (consent == null ? void 0 : consent.given) === true;
-  }
-  async function logConsentToServer(apiUrl) {
-    const response = await fetch(`${apiUrl}/api/consent-log`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        extensionVersion: EXTENSION_VERSION,
-        consentTextVersion: getConsentTextHash(),
-        userAgent: navigator.userAgent
-      })
-    });
-    if (!response.ok) {
-      throw new Error(`Failed to log consent: ${response.status}`);
+  async function grantConsent(apiUrl, authToken) {
+    const result = await logConsentToServer(apiUrl, authToken);
+    if (!result.success) {
+      return { success: false, error: result.error };
     }
-    return response.json();
-  }
-  async function grantConsent(apiUrl) {
-    const serverResponse = await logConsentToServer(apiUrl);
-    await setConsent(serverResponse);
+    await storeLocalConsent(result.consentId);
+    return { success: true };
   }
 
   // src/content.ts
@@ -3751,7 +3761,7 @@ This data is transmitted to our servers. By proceeding, you acknowledge you are 
         panel == null ? void 0 : panel.hideConsentOverlay();
       }
     });
-    hasConsent().then((consented) => {
+    hasLocalConsent().then((consented) => {
       if (!consented && panel) {
         logger.debug("No consent found, showing consent overlay");
         panel.showConsentOverlay();
@@ -4128,7 +4138,7 @@ This data is transmitted to our servers. By proceeding, you acknowledge you are 
         historyUpdates = withHistory.history || [];
         const profileId = extractProfileIdFromUrl(window.location.href);
         if (profileId) {
-          hasConsent().then((consented2) => {
+          hasLocalConsent().then((consented2) => {
             if (!consented2) {
               logger.debug("Server sync skipped - no consent");
               return;
@@ -4201,7 +4211,7 @@ This data is transmitted to our servers. By proceeding, you acknowledge you are 
       }
       return syncResult2;
     }
-    const consented = await hasConsent();
+    const consented = await hasLocalConsent();
     if (!consented) {
       logger.debug("Server sync skipped - no consent. Using local heuristics.");
       const syncResult2 = mergeProfileDataSync(newData, storedData);

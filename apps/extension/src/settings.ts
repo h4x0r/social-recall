@@ -5,7 +5,7 @@
  * No Web App URL config, no export/import.
  */
 
-import { hasConsent, revokeConsent, getConsent } from './consent';
+// Consent revocation happens on web app /privacy page, not in extension
 
 const WEB_APP_URL = 'https://www.socialrecall.now';
 
@@ -14,15 +14,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   const googleStatus = document.getElementById('googleStatus') as HTMLElement;
   const disconnectRow = document.getElementById('disconnectRow') as HTMLElement;
   const privacyRow = document.getElementById('privacyRow') as HTMLElement;
-  const revokeRow = document.getElementById('revokeRow') as HTMLElement;
-  const revokeStatus = document.getElementById('revokeStatus') as HTMLElement;
 
   let isConnected = false;
   let showingDisconnect = false;
 
-  // Check initial auth state and consent state
+  // Check initial auth state
   await refreshAuthState();
-  await refreshConsentState();
 
   // Google row click handler
   googleRow.addEventListener('click', () => {
@@ -58,25 +55,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     chrome.tabs.create({ url: `${WEB_APP_URL}/privacy` });
   });
 
-  // Revoke consent click handler
-  revokeRow.addEventListener('click', async () => {
-    const confirmed = confirm(
-      'Are you sure you want to revoke consent?\n\n' +
-      'This will stop all data collection and server sync. ' +
-      'Your existing data will remain until you request deletion.'
-    );
-
-    if (confirmed) {
-      try {
-        await revokeConsent(WEB_APP_URL);
-        await refreshConsentState();
-      } catch (error) {
-        console.error('Failed to revoke consent:', error);
-        alert('Failed to revoke consent. Please try again.');
-      }
-    }
-  });
-
   // Listen for auth success messages
   chrome.runtime.onMessage.addListener((message) => {
     if (message.type === 'AUTH_SUCCESS') {
@@ -100,23 +78,4 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  async function refreshConsentState(): Promise<void> {
-    const consent = await getConsent();
-    const hasActiveConsent = await hasConsent();
-
-    if (!consent) {
-      // No consent record at all
-      revokeRow.classList.add('settings__row--disabled');
-      revokeStatus.textContent = 'No consent given';
-    } else if (hasActiveConsent) {
-      // Active consent
-      revokeRow.classList.remove('settings__row--disabled');
-      revokeRow.classList.add('settings__row--warning');
-      revokeStatus.textContent = 'Click to revoke';
-    } else {
-      // Consent was revoked
-      revokeRow.classList.add('settings__row--disabled');
-      revokeStatus.textContent = 'Consent revoked';
-    }
-  }
 });
